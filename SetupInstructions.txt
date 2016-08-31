@@ -1,0 +1,12 @@
+Instructions for setting up the Toptica laser to take data with it:
+
+TL;DR
+
+1) Connect the laser to the computer using an ethernet cable
+2) Connect NI USB6002 port PFI1 to the BNC labelled "2" coming out of the Toptica
+3) Connect the data you want into the analog input ports of the NI USB6002 (for instance, GasCell into AI0 and
+   Interferometer into AI1)
+4) Run ScanController.py with the correct inputs to collect your data
+
+LONG EXPLANATION HERE
+The GUI (ScanUI.ui) was written in Qt Designer
