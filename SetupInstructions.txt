@@ -9,4 +9,11 @@ TL;DR
 4) Run ScanController.py with the correct inputs to collect your data
 
 LONG EXPLANATION HERE
-The GUI (ScanUI.ui) was written in Qt Designer
+The GUI (ScanUI.ui) was written in Qt Designer,
+A simple example of GUI programming is given in ????
+
+It's non-trivial to use matplotlib graphs with Qt, it requires a QWidget to be used as a placeholder and the use of the
+obscure matplotlib libraries imported in ScanController.txt
+
+We use threading to allow the GUI to simultaneously take data, plot data, and still be responsive. A simple example of
+using threading is shown in SimpleThreadExample.py

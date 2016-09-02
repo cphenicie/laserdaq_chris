@@ -14,7 +14,7 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <widget class="QWidget" name="widget1" native="true">
+   <widget class="QWidget" name="graphHolder1" native="true">
     <property name="geometry">
      <rect>
       <x>30</x>
@@ -24,7 +24,7 @@
      </rect>
     </property>
    </widget>
-   <widget class="QWidget" name="widget2" native="true">
+   <widget class="QWidget" name="graphHolder2" native="true">
     <property name="geometry">
      <rect>
       <x>30</x>
@@ -34,7 +34,7 @@
      </rect>
     </property>
    </widget>
-   <widget class="QWidget" name="widget3" native="true">
+   <widget class="QWidget" name="graphHolder3" native="true">
     <property name="geometry">
      <rect>
       <x>30</x>
@@ -400,8 +400,8 @@ ai1: Interferometer</string>
      <enum>Qt::Vertical</enum>
     </property>
    </widget>
-   <zorder>widget2</zorder>
-   <zorder>widget3</zorder>
+   <zorder>graphHolder2</zorder>
+   <zorder>graphHolder3</zorder>
    <zorder>startWaveSpinBox</zorder>
    <zorder>label</zorder>
    <zorder>label_2</zorder>
@@ -409,7 +409,7 @@ ai1: Interferometer</string>
    <zorder>label_3</zorder>
    <zorder>scanRateSpinBox</zorder>
    <zorder>label_4</zorder>
-   <zorder>widget1</zorder>
+   <zorder>graphHolder1</zorder>
    <zorder>label_5</zorder>
    <zorder>sampleRateSpinBox</zorder>
    <zorder>fileNameLineEdit</zorder>

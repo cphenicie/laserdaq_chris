@@ -1,8 +1,12 @@
 # Things to add: Read the laser current and put that in the metadata
 #                Automaitcally make folder if not exist
+#                Output current actual wavelength and current action/progress in scan
+#                Change which graphs you show (maybe allow you to grab previous data? Like have a load data tab that adds the option to the comboBox?
+#                Make nSampPerChan and nSampsPerChan HAVE MUCH MORE DIFFERENT NAMES! (Once is "samp" and one is "samps")
 
 import sys
 from PyQt4 import QtCore, QtGui, uic
+from PyQt4.QtCore import QThread, SIGNAL
 import PyDAQmx as pydaqmx  # Python library to execute NI-DAQmx code
 import pydaqshortcuts
 import numpy as np
@@ -12,6 +16,9 @@ import datetime
 import telnetlib
 import time
 import ctypes
+#from pyqtShortcuts import MatplotlibWidget  # Module that has custom widgets for Qt
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 
 
 ### Hard-coded variables ###
@@ -29,11 +36,131 @@ else:
     day = str(td.day)
 filePath = r"I:\\thompsonlab\\REI\\Daily\\%s\\%s-%s\\%s%s%s\\" %(year, year, month, year, month, day)
 waveOffset = 5  # How far away from the actual starting wavelength (in nm) we will initially slew the laser
+dataBuffer = np.zeros((10000,), dtype=np.int16)
+stillWorking = True
+progStep = 0.5  # How large a step to take in data collection before plotting the progress
 #############################
 
 
 qtCreatorFile = "ScanUI.ui"  # Enter file here.
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
+
+class thread_CollectAnalogIn(QThread):
+    def __init__(self, GUIObj, taskHandle, dataBuffer):
+        QThread.__init__(self)
+        # Initialize variables fed from the GUI object
+        self.GUIObj = GUIObj
+        self.taskHandle = taskHandle
+        self.dataBuffer = dataBuffer
+
+        # Initialize some hard-coded variables
+        self.read = pydaqmx.int32()
+        self.nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
+        self.timeout = -1  # -1 means wait indefinitely to read the samples
+        self.fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+        self.arrSize = pydaqmx.uInt32(len(self.dataBuffer))
+        self.sampsPerChanRead = ctypes.byref(self.read)
+
+    def run(self):
+        self.GUIObj.tn.write("(exec 'laser1:ctl:scan:start) \r\n")
+        pydaqmx.DAQmxStartTask(self.taskHandle)
+        pydaqmx.DAQmxReadBinaryI16(self.taskHandle, self.nSampsPerChan, self.timeout, self.fillMode, self.dataBuffer, self.arrSize, self.sampsPerChanRead, None)
+        pydaqmx.DAQmxStopTask(self.taskHandle)
+
+        self.emit(SIGNAL('plot_data(PyQt_PyObject)'), self.dataBuffer)
+
+
+class thread_PlotProgress(QThread):
+    def __init__(self, GUIObj):
+        QThread.__init__(self)
+        # Initialize variables fed from the GUI object
+        self.GUIObj = GUIObj
+
+        global dataBuffer
+
+        while stillWorking:
+            print("Updating plot")
+            #self.GUIObj.axHand1.plot(self.GUIObj.dataBuffer[0:self.GUIObj.nSampPerChan])
+            #self.GUIObj.axHand1.plot(dataBuffer[0:self.GUIObj.nSampPerChan])
+            self.GUIObj.axHand1.plot(np.random.rand(5))
+            self.GUIObj.canvas1.draw()
+
+            #self.GUIObj.axHand2.plot(self.GUIObj.dataBuffer[self.GUIObj.nSampPerChan: 2 * self.GUIObj.nSampPerChan - 1])
+            self.GUIObj.axHand2.plot(dataBuffer[self.GUIObj.nSampPerChan: 2 * self.GUIObj.nSampPerChan - 1])
+            self.GUIObj.canvas2.draw()
+
+            #self.GUIObj.axHand3.plot(self.GUIObj.dataBuffer[2 * self.GUIObj.nSampPerChan: 3 * self.GUIObj.nSampPerChan - 1])
+            self.GUIObj.axHand3.plot(dataBuffer[2 * self.GUIObj.nSampPerChan: 3 * self.GUIObj.nSampPerChan - 1])
+            self.GUIObj.canvas3.draw()
+            time.sleep(1)
+            self.GUIObj.show()
+
+
+
+
+
+# class thread_CheckScanProgress(QThread):
+#     def __init__(self, GUIObj):
+#         QThread.__init__(self)
+#         self.GUIObj = GUIObj
+#         self.tn = GUIObj.tn
+#         #self.stillWorking = True
+#         global stillWorking
+#         stillWorking = True
+#
+#     def run(self):
+#         global stillWorking
+#         #while self.stillWorking:
+#         while stillWorking:
+#             time.sleep(1)  # Wait until the progress has definitely started before we start checking progress
+#             self.tn.read_very_eager()  # Clear out the buffer
+#             self.tn.write("(param-disp 'laser1:ctl:scan:progress) \r\n")
+#             time.sleep(.03)  # Wait until the laser can respond fully
+#             reList = ["progress = "]
+#             self.tn.expect(reList, 1)  # Wait up to 1 second to receive a message containing a string in reList
+#             output = self.tn.read_very_eager()
+#             #print("length of output = " + str(len(output)))
+#             if len(output) == 6:  # Progress is one digit (There are 5 characters after the progress value)
+#                 print("Laser says \"" + output[0] + "\"")
+#                 if int(output[0]) == 0:
+#                     print("I'm 0")
+#                     #self.stillWorking = False
+#                     stillWorking = False
+#             else:
+#                 print("Laser says \"" + output[0:2] + "\"")
+
+
+class thread_WaitForSlew(QThread):
+    def __init__(self, GUIObj):
+        QThread.__init__(self)
+        self.GUIObj = GUIObj
+        #self.tn = GUIObj.tn
+
+
+    def run(self):
+        self.GUIObj.tn.read_very_eager()  # Clear out the buffer
+        reList = ["wavelength-act = "]  # The expression we will look for in the output of the laser, we will end up basically deleting all the text up to and including this
+        timeWait = 30  # The time we will wait for the laser to slew to the correct wavelength
+        while timeWait > 0:
+            self.GUIObj.tn.write("(param-disp 'laser1:ctl:wavelength-act) \r\n")
+            time.sleep(.03)
+            self.GUIObj.tn.expect(reList, 1)  # Wait up to 1 second to receive a message containing a string in reList
+            waveActStr = self.GUIObj.tn.read_very_eager()  # The beginning of the buffer is now the wavelength
+            if waveActStr == '':
+                waveAct = 0  #  Arbitrary choice, anything would work as long as it's guaranteed not to be within 0.1nm of the set starting point
+            else:
+                waveAct = float(waveActStr[0:6])  # Just take up to the first decimal
+
+            if abs(waveAct - (self.GUIObj.startWave - waveOffset)) < 0.1:
+                timeWait = 0
+            else:
+                # print("Difference = " + str(waveAct - self.startWave - waveOffset) + " , timeWait = " + str(timeWait) )
+                timeWait = timeWait - 1
+                time.sleep(1)
+                if timeWait <= 0:
+                    print(
+                    "After 30 seconds we still aren't at the starting wavelength, code will now crash. Have a nice day!")
+
 
 class MyApp(QtGui.QMainWindow, Ui_MainWindow):
     def __init__(self):
@@ -50,6 +177,39 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.fileNameLineEdit.textChanged.connect(self.updateMetadata)
 
         self.startScanButton.clicked.connect(self.startScan)
+
+        self.figHand1 = Figure()
+        self.axHand1 = self.figHand1.add_subplot(111)
+        self.canvas1 = FigureCanvasQTAgg(self.figHand1)
+        self.canvas1.setParent(self.graphHolder1)
+        self.figHand1.subplots_adjust(bottom=0.7, top=0.95, right=0.69, left=0.15) # Otherwise the axes seem to get cut off
+
+        self.figHand2 = Figure()
+        self.axHand2 = self.figHand2.add_subplot(111)
+        self.canvas2 = FigureCanvasQTAgg(self.figHand2)
+        self.canvas2.setParent(self.graphHolder2)
+        self.figHand2.subplots_adjust(bottom=0.7, top=0.95, right=0.69,
+                                      left=0.15)  # Otherwise the axes seem to get cut off
+
+        self.figHand3 = Figure()
+        self.axHand3 = self.figHand3.add_subplot(111)
+        self.canvas3 = FigureCanvasQTAgg(self.figHand3)
+        self.canvas3.setParent(self.graphHolder3)
+        self.figHand3.subplots_adjust(bottom=0.7, top=0.95, right=0.69,
+                                      left=0.15)  # Otherwise the axes seem to get cut off
+
+        self.graphChoices1.currentIndexChanged.connect(self.changeGraph1)
+
+    #
+    def changeGraph1(self):
+        print("In changeGraph1")
+        newData = self.graphChoices1.currentText()
+    #     self.figHand1 = Figure()
+    #     self.axHand1 = self.figHand1.add_subplot(111)
+    #     self.canvas1 = FigureCanvasQTAgg(self.figHand1)
+    #     self.canvas1.setParent(self.graphHolder1)
+        self.axHand1.plot([5, 4, 3, 2, 1])
+        self.canvas1.draw()
 
 
     def updateMetadata(self):
@@ -106,6 +266,16 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         pydaqshortcuts.makeAnalogIn(portString, self.readAI, self.fSampPerChan, self.nSampPerChan)
         pydaqmx.DAQmxCfgDigEdgeStartTrig(self.readAI, startTrig, pydaqmx.DAQmx_Val_Rising)  # Trigger to actually start collecting data
 
+
+        self.rangeWave = abs( self.endWave - self.startWave )  # The range of wavelengths we are scanning
+        self.nWholeSteps = np.floor( self.rangeWave / progStep )
+        self.nSampPerChanPerStep = np.floor( self.sampleRate *  / self.scanRate )
+
+
+        self.readStep = pydaqmx.TaskHandle()
+
+
+
     def initializeLaser(self):
         self.tn = telnetlib.Telnet("10.0.0.2", 1998)
         time.sleep(.1)
@@ -122,18 +292,21 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         time.sleep(1)
 
     def stoptask(self):
+        time.sleep(1)
         self.tn.write("(param-disp 'laser1:ctl:scan:progress) \r\n")
         time.sleep(.03)
 
         # take output and strip extra spaces
         output = self.tn.read_very_eager()
+        print("In stoptask(), Laser says \"" + output + "\"")
         output = output.replace(" ", "")
 
         # collect scan progress from the Telnet prompt
         searchobj = re.search('(?<=:progress=)\d+', output, re.MULTILINE)
         try:
             if searchobj.group() == "0":
-                pydaqmx.DAQmxWaitUntilTaskDone(self.readAI, -1)
+                #pydaqmx.DAQmxWaitUntilTaskDone(self.readAI, -1)
+                time.sleep(1)
                 pydaqmx.DAQmxStopTask(self.readAI)
                 print "Scan Complete"
             else:
@@ -147,67 +320,103 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
             print "scan depth too long"
             sys.exit()
 
-    def getraw(self):
-        nChan = len(self.aiPorts)
-        self.dataSorted = np.zeros((self.nSampPerChan, nChan))
-        for i in range(0, len(self.dataBuffer), nChan):
-            for j in range(nChan):
-                self.dataSorted[i/2, j] = self.dataBuffer[i+j]
+    # def getraw(self):
+    #     nChan = len(self.aiPorts)
+    #     self.dataSorted = np.zeros((self.nSampPerChan, nChan))
+    #     for i in range(0, len(self.dataBuffer), nChan):
+    #         for j in range(nChan):
+    #             self.dataSorted[i/nChan, j] = self.dataBuffer[i+j]
 
 
-    def waitForSlew(self):
-        self.tn.read_very_eager()  # Clear out the buffer
-        reList = ["wavelength-act = "]  # The expression we will look for in the output of the laser, we will end up basically deleting all the text up to and including this
-        timeWait = 30  # The time we will wait for the laser to slew to the correct wavelength
-        while timeWait > 0:
-            self.tn.write("(param-disp 'laser1:ctl:wavelength-act) \r\n")
-            time.sleep(.03)
-            self.tn.expect(reList, 1)  # Wait up to 1 second to receive a message containing a string in reList
-            waveActStr = self.tn.read_very_eager()  # The beginning of the buffer is now the wavelength
-            if waveActStr == '':
-                waveAct = 0  #  Guaranteeing that it is not within 0.1nm of the set starting point
-            else:
-                waveAct = float(waveActStr[0:6])
+    def plot_data(self):
+        global dataBuffer
+        print('into plot')
+        #self.axHand1.plot(self.dataBuffer[0:self.nSampPerChan])
+        self.axHand1.plot(dataBuffer[0:self.nSampPerChan])
+        self.canvas1.draw()
 
-            if abs( waveAct - (self.startWave - waveOffset) ) < 0.1:
-                timeWait = 0
-            else:
-                #print("Difference = " + str(waveAct - self.startWave - waveOffset) + " , timeWait = " + str(timeWait) )
-                timeWait = timeWait - 1
-                time.sleep(1)
-                if timeWait <= 0:
-                    print("After 30 seconds we still aren't at the starting wavelength, code will now crash. Have a nice day!")
+        #self.axHand2.plot(self.dataBuffer[self.nSampPerChan: 2*self.nSampPerChan-1])
+        self.axHand2.plot(dataBuffer[self.nSampPerChan: 2 * self.nSampPerChan - 1])
+        self.canvas2.draw()
 
+        # self.axHand3.plot(self.dataBuffer[2*self.nSampPerChan : 3*self.nSampPerChan-1])
+        self.axHand3.plot(dataBuffer[2 * self.nSampPerChan: 3 * self.nSampPerChan - 1])
+        self.canvas3.draw()
 
-
-    def startScan(self):
-        self.initializeData()  # Set up the GUI and initialize variables to hold data
-        self.initializeLaser()  # Write the parameter into the Toptica
-        self.waitForSlew() # Wait until laser is at starting wavelength
-        self.dataBuffer = np.zeros((int(self.nSampPerChan * len(self.aiPorts)),), dtype=np.int16)
-        nominal_x = np.linspace(self.startWave, self.endWave, self.nSampPerChan)
-        time.sleep(0.5)
-        print "Starting scan"
-        self.tn.write("(exec 'laser1:ctl:scan:start) \r\n")
-        read = pydaqmx.int32()
-        pydaqmx.DAQmxStartTask(self.readAI)
-        pydaqmx.DAQmxReadBinaryI16(self.readAI, -1, -1, pydaqmx.DAQmx_Val_GroupByScanNumber, self.dataBuffer, pydaqmx.uInt32(len(self.dataBuffer)),
-                             ctypes.byref(read), None)
-
+    def stopScan(self):
+        global dataBuffer
+        self.midScan = False
+        print('done')
         self.stoptask()
-        self.getraw()
+        print("Finished stoptask()")
+        #self.getraw()
         dataDict = {}
+        # i = 0
+        # for port in self.aiPorts:
+        #     dataDict[self.aiNameDict[port].replace(" ", "")] = self.dataSorted[:, i]
+        #     i = i + 1
+
         i = 0
         for port in self.aiPorts:
-            dataDict[self.aiNameDict[port].replace(" ", "")] = self.dataSorted[:, i]
-            i = i+1
+            # dataDict[self.aiNameDict[port].replace(" ", "")] = self.dataBuffer[ i*self.nSampPerChan : (i+1)*self.nSampPerChan-1 ]
+            dataDict[self.aiNameDict[port].replace(" ", "")] = dataBuffer[i * self.nSampPerChan: (i + 1) * self.nSampPerChan - 1]
+            i = i + 1
 
-        dataDict["nominal_x"] = nominal_x
+        #dataDict["self.nominal_x"] = self.nominal_x
+        dataDict["nominal_x"] = self.nominal_x
         sio.savemat(filePath + str(self.fileName), dataDict)
         txt = open(filePath + str(self.fileName) + '.txt', 'w')
         txt.write(self.metadata)
+        txt.close()
 
+    def startScan(self):
+        self.midScan = True
+        #self.displayGraph()
+        self.initializeData()  # Set up the GUI and initialize variables to hold data
+        self.initializeLaser()  # Write the parameter into the Toptica
+        self.waitForSlew = thread_WaitForSlew(self)
+        self.connect(self.waitForSlew, SIGNAL('finished()'), self.takeData)
+        self.waitForSlew.start()
+        #self.waitForSlew() # Wait until laser is at starting wavelength
 
+    def takeData(self):
+        # self.dataBuffer = np.zeros((int(self.nSampPerChan * len(self.aiPorts)),), dtype=np.int16)
+        self.nominal_x = np.linspace(self.startWave, self.endWave, self.nSampPerChan)
+        time.sleep(0.5)
+        print "Starting scan"
+
+        # Keep track of progress
+        self.checkScanProgress = thread_CheckScanProgress(self)
+        self.checkScanProgress.start()
+        self.show()
+        # Collect the data
+        # self.collectAnalogIn = thread_CollectAnalogIn(self, taskHandle=self.readAI, dataBuffer=self.dataBuffer)
+        self.collectAnalogIn = thread_CollectAnalogIn(self)
+        self.connect(self.collectAnalogIn, SIGNAL('plot_data(PyQt_PyObject)'), self.plot_data)
+        self.connect(self.collectAnalogIn, SIGNAL('finished()'), self.stopScan)
+        self.collectAnalogIn.start()
+
+        # i = 0
+        # while i < 10:
+        #     self.plotProgress = thread_PlotProgress(self)
+        #     self.plotProgress.start()
+        #     i = i + 1
+        #     time.sleep(1)
+
+        # self.plotProgress = thread_PlotProgress(self)
+        # self.plotProgress.start()
+
+        global dataBuffer
+        self.axHand1.plot(np.random.rand(5))
+        self.canvas1.draw()
+        while stillWorking:
+            print("Updating plot")
+            self.axHand1.plot(dataBuffer[0:self.nSampPerChan])
+            self.axHand1.plot(dataBuffer[0:self.nSampPerChan])
+            # self.axHand1.plot(np.random.rand(5))
+            # self.canvas1.draw()
+            time.sleep(1)
+            app.processEvents()
 
 
 
