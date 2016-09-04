@@ -29,10 +29,103 @@ else:
 filePath = r"I:\\thompsonlab\\REI\\Daily\\%s\\%s-%s\\%s%s%s\\" % (year, year, month, year, month, day)
 waveOffset = 5  # How far away from the actual starting wavelength (in nm) we will initially slew the laser
 #############################
-
-
 qtCreatorFile = "ScanUI.ui"  # Enter file here.
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
+
+
+
+
+class thread_CollectAnalogIn(QThread):
+    def __init__(self, GUIObj, taskHandle, dataBuffer):
+        QThread.__init__(self)
+        # Initialize variables fed from the GUI object
+        self.GUIObj = GUIObj
+        self.taskHandle = taskHandle
+        self.dataBuffer = dataBuffer
+
+        # Initialize some hard-coded variables
+        self.read = pydaqmx.int32()
+        self.nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
+        self.timeout = -1  # -1 means wait indefinitely to read the samples
+        self.fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies that dataBuffer will be divided into continuous blocks of data for each channel (rather than interleaved)
+        self.arrSize = pydaqmx.uInt32(len(self.dataBuffer))
+        self.sampsPerChanRead = ctypes.byref(self.read)
+
+    def run(self):
+        self.GUIObj.tn.write("(exec 'laser1:ctl:scan:start) \r\n")
+        pydaqmx.DAQmxStartTask(self.taskHandle)
+        pydaqmx.DAQmxReadBinaryI16(self.taskHandle, self.nSampsPerChan, self.timeout, self.fillMode, self.dataBuffer, self.arrSize, self.sampsPerChanRead, None)
+        pydaqmx.DAQmxStopTask(self.taskHandle)
+
+        self.emit(SIGNAL('plot_data(PyQt_PyObject)'), self.dataBuffer)
+
+
+
+class thread_CheckScanProgress(QThread):
+    def __init__(self, GUIObj):
+        QThread.__init__(self)
+        self.GUIObj = GUIObj
+        self.tn = GUIObj.tn
+        #self.stillWorking = True
+        global stillWorking
+        stillWorking = True
+
+    def run(self):
+        global stillWorking
+        #while self.stillWorking:
+        while stillWorking:
+            time.sleep(1)  # Wait until the progress has definitely started before we start checking progress
+            self.tn.read_very_eager()  # Clear out the buffer
+            self.tn.write("(param-disp 'laser1:ctl:scan:progress) \r\n")
+            time.sleep(.03)  # Wait until the laser can respond fully
+            reList = ["progress = "]
+            self.tn.expect(reList, 1)  # Wait up to 1 second to receive a message containing a string in reList
+            output = self.tn.read_very_eager()
+            #print("length of output = " + str(len(output)))
+            if len(output) == 6:  # Progress is one digit (There are 5 characters after the progress value)
+                print("Laser says \"" + output[0] + "\"")
+                if int(output[0]) == 0:
+                    print("I'm 0")
+                    #self.stillWorking = False
+                    stillWorking = False
+            else:
+                print("Laser says \"" + output[0:2] + "\"")
+
+
+
+
+class thread_WaitForSlew(QThread):
+    def __init__(self, GUIObj):
+        QThread.__init__(self)
+        self.GUIObj = GUIObj
+        #self.tn = GUIObj.tn
+
+
+    def run(self):
+        self.GUIObj.tn.read_very_eager()  # Clear out the buffer
+        reList = ["wavelength-act = "]  # The expression we will look for in the output of the laser, we will end up basically deleting all the text up to and including this
+        timeWait = 30  # The time we will wait for the laser to slew to the correct wavelength
+        while timeWait > 0:
+            self.GUIObj.tn.write("(param-disp 'laser1:ctl:wavelength-act) \r\n")
+            time.sleep(.03)
+            self.GUIObj.tn.expect(reList, 1)  # Wait up to 1 second to receive a message containing a string in reList
+            waveActStr = self.GUIObj.tn.read_very_eager()  # The beginning of the buffer is now the wavelength
+            if waveActStr == '':
+                waveAct = 0  #  Arbitrary choice, anything would work as long as it's guaranteed not to be within 0.1nm of the set starting point
+            else:
+                waveAct = float(waveActStr[0:6])  # Just take up to the first decimal
+
+            if abs(waveAct - (self.GUIObj.startWave - waveOffset)) < 0.1:
+                timeWait = 0
+            else:
+                # print("Difference = " + str(waveAct - self.startWave - waveOffset) + " , timeWait = " + str(timeWait) )
+                timeWait = timeWait - 1
+                time.sleep(1)
+                if timeWait <= 0:
+                    print(
+                    "After 30 seconds we still aren't at the starting wavelength, code will now crash. Have a nice day!")
+
+
 
 
 class MyApp(QtGui.QMainWindow, Ui_MainWindow):

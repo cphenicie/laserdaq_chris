@@ -9,17 +9,19 @@ from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 class thread_generatedata(QThread):
-    def __init__(self, thdmain):
+    def __init__(self, parentObj):
         QThread.__init__(self)
-        self.thdmain = thdmain
+        self.parentObj = parentObj
 
     def run(self):
         # do data processing, acquisition etc here.
         print('take 5 seconds to take data')
+        self.parentObj.sayHi()
         time.sleep(5)
         data = np.random.rand(5)
 
         self.emit(SIGNAL('plot_data(PyQt_PyObject)'), data)
+        return 1
 
 qtCreatorFile = "ScanUI.ui"  # Enter file here.
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
@@ -41,7 +43,7 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
     def startScan(self):
         # should initiate thread, and grab the data
         self.thdgendat = thread_generatedata(self)
-        self.connect(self.thdgendat, SIGNAL('plot_data(PyQt_PyObject)'), self.plot_data)
+        a = self.connect(self.thdgendat, SIGNAL('plot_data(PyQt_PyObject)'), self.plot_data)
         self.connect(self.thdgendat, SIGNAL('finished()'), self.stopScan)
         self.thdgendat.start()
 
@@ -52,6 +54,9 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         print('into plot')
         self.axHand1.plot(data)
         self.canvas1.draw()
+
+    def sayHi(self):
+        print("hello")
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)

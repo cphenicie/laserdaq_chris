@@ -2,9 +2,22 @@
 # To get the documentation for functions called by PyDAQmx, open the NI-DAQmx C Reference Help, which can be found in
 # the Start menu an search for "C Reference Help"
 
+########## Contents ##########
+
+### Classes ###
+# TTLSwitch: configure a given digital out line to be switched on (with TTLSwitch.high()) or off (with TTLSwitch.low())
+
+
+### Functions ###
+# makeAnalogIn: Configure analog in channel(s) to collect a total of nSamp data points at a frequency fSamp
+# getAnalogIn: Read all nSamp channels from an analog in task
+# putDataInQueue:  Fill up a specified buffer with data and put that data into a specified queue
+
+
 import PyDAQmx as pydaqmx  # Python library to execute NI-DAQmx code
 import ctypes # Lets us use data types compatible with C code
 import numpy as np
+import Queue
 
 # TTLswitch is the most basic digital output class. Just make new object by specifying the dev (str, the device name),
 # port (int, the port number on the device), and line (int, the line number in the port. The built in function high()
@@ -68,13 +81,14 @@ def makeAnalogIn(portString, handle, fSamp, nSamp):
     ## Configure the clock
     # int32 DAQmxCfgSampClkTiming (TaskHandle taskHandle, const char source[], float64 rate, int32 activeEdge, int32 sampleMode, uInt64 sampsPerChanToAcquire);
     source = None  # If you use an external clock, specify here, otherwise it should be None
-    rate = pydaqmx.float64(fSamp)
+    rate = pydaqmx.float64(fSamp) # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
     edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
     sampMode = pydaqmx.DAQmx_Val_FiniteSamps  # Acquire samples continuously or just a finite number of samples
-    sampPerChan = pydaqmx.uInt64(nSamp)
+    sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
     pydaqmx.DAQmxCfgSampClkTiming(handle, source, rate, edge, sampMode, sampPerChan)
 
-# Actually make the measurement of a configured TaskHandle handle and save it into dataBuffer
+# Intended to work well for short measurements.
+# Make an entire measurement of a configured TaskHandle handle and save it into dataBuffer
 def getAnalogIn(handle, dataBuffer):
     # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
     read = pydaqmx.int32()
@@ -86,3 +100,20 @@ def getAnalogIn(handle, dataBuffer):
     pydaqmx.DAQmxStartTask(handle)
     pydaqmx.DAQmxReadBinaryI16(handle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize, sampsPerChanRead, None)  # This is the line when you actually read the voltage
     pydaqmx.DAQmxStopTask(handle)
+
+# Intended to work well with threads and long data collection
+# Grab as much data as will fit in dataBuffer and put in into a queue, also put into the queue how much data we took
+# (Note, this can be less than the entire size of the buffer if, for instance, the taskHandle one has 900 data points
+# left until it has collected all nSamp, but we still want to use a buffer with 1000 elements)
+def putDataInQueue(taskHandle, dataBuffer, nChan, queue):
+    read = pydaqmx.int32()
+    nSampsPerChan = len(dataBuffer) / nChan  # How many samples we will collect from each channel
+    timeout = -1  # -1 means wait indefinitely to read the samples
+    fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies that dataBuffer will be divided into continuous blocks of data for each channel (rather than interleaved)
+    arrSize = pydaqmx.uInt32(len(dataBuffer))
+
+    pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize,
+                               ctypes.byref(read), None)
+    queue.put(dataBuffer)
+    queue.put(read)
+    return
