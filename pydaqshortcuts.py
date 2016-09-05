@@ -91,14 +91,15 @@ def makeAnalogIn(portString, handle, fSamp, nSamp):
 # Make an entire measurement of a configured TaskHandle handle and save it into dataBuffer
 def getAnalogIn(handle, dataBuffer):
     # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
-    read = pydaqmx.int32()
+    read = pydaqmx.int32()  # Variable that will hold the value of how many samples we actually read (This gives us the freedom of putting in any sized dataBuffer and know exactly how much data is in it)
     nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
     timeout = -1  # -1 means wait indefinitely to read the samples
     fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
     arrSize = pydaqmx.uInt32(len(dataBuffer))
-    sampsPerChanRead = ctypes.byref(read)
+    # sampsPerChanRead = ctypes.byref(read)  # The number of samples we actually read
     pydaqmx.DAQmxStartTask(handle)
-    pydaqmx.DAQmxReadBinaryI16(handle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize, sampsPerChanRead, None)  # This is the line when you actually read the voltage
+    # pydaqmx.DAQmxReadBinaryI16(handle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize, sampsPerChanRead, None)  # This is the line when you actually read the voltage
+    pydaqmx.DAQmxReadBinaryI16(handle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize, ctypes.byref(read), None)  # This is the line when you actually read the voltage
     pydaqmx.DAQmxStopTask(handle)
 
 # Intended to work well with threads and long data collection

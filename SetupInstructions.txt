@@ -1,19 +1,35 @@
 Instructions for setting up the Toptica laser to take data with it:
 
-TL;DR
-
+Minimal instructions:
 1) Connect the laser to the computer using an ethernet cable
 2) Connect NI USB6002 port PFI1 to the BNC labelled "2" coming out of the Toptica
 3) Connect the data you want into the analog input ports of the NI USB6002 (for instance, GasCell into AI0 and
    Interferometer into AI1)
-4) Run ScanController.py with the correct inputs to collect your data
+4) Run ScanController.py with the correct inputs to collect your data\
+5) If you're missing any code, try looking in https://github.com/cphenicie/laserdaq_chris
 
-LONG EXPLANATION HERE
-The GUI (ScanUI.ui) was written in Qt Designer,
-A simple example of GUI programming is given in ????
 
-It's non-trivial to use matplotlib graphs with Qt, it requires a QWidget to be used as a placeholder and the use of the
-obscure matplotlib libraries imported in ScanController.txt
+Full information:
 
-We use threading to allow the GUI to simultaneously take data, plot data, and still be responsive. A simple example of
-using threading is shown in SimpleThreadExample.py
+The GUI (ScanUI.ui) was written in Qt Designer (open up start menu and type "designer" to open this program). The
+placement and names of all GUI objects are set within Designer. There's no widget specifically designed for matplotlib
+graphs, so I used basic QWidgets and set them as the parent of the a matplotlib canvas object. Therefore, the canvas
+gets important attributes (like geometry) from the QWidget.
+
+The program talks with the Toptica laser over an ethernet connection using a telnet protocol. The commands used are
+described in  I:\thompsonlab\Manuals\Toptica\DLCpro-Command-Reference.pdf. Roughly, a scan consists of a start and
+ending wavelength and a speed at which we scan between them. If the Toptica receives a message to start a scan before
+its current wavelength is the scan's starting wavelength, it will abort the scan. Therefore, we use the function
+waitForSlew() in topticaShortcuts.py to wait until the wavelength is at the desired starting point before we start the
+scan. Since the motor that scans wavelengths has bad acceleration, we want to let it get up to full speed before we
+start taking data. This means we have to start the laser scan at a wavelength below the desired starting point. We then
+set up the laser to output an electrical pulse (out of the BNC labelled "2") once it reaches the actual desired starting
+point. This triggers the DAQ (in the current setup, it triggers at PFI1) to start taking data.
+
+To take data, we need to set up analog in channels on the DAQ and configure the clock. The default values for doing this
+are set in function makeAnalogIn() in pydaqshortcuts.py. Since we want to plot data while we are taking it, we need to
+break up retrieving data from the DAQ in small chunks, and then plot each chunk. This is accomplished by having data
+collection run in a thread parallel to the rest of the program so it continues to collect data while the GUI is plotting
+it. We run the thread with a buffer large enough to hold 0.1s worth of data, which is then returned to the GUI to plot.
+This data is returned through a Queue so we can easily access the data sequentially whenever we want. This data
+collection is accomplished through the function putDataInQueue() in pydaqshortcuts.py()

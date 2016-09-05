@@ -1,6 +1,6 @@
 # Things to add: Read the laser current and put that in the metadata
 #                Make nSampPerChan and nSampsPerChan HAVE MUCH MORE DIFFERENT NAMES! (One is "samp" and one is "samps")
-
+#                Make plotting faster or make it so that you can abort GUI without losing data (or is that already the case?)
 import sys
 from PyQt4 import QtCore, QtGui, uic
 import PyDAQmx as pydaqmx  # Python library to execute NI-DAQmx code
@@ -8,7 +8,7 @@ import pydaqshortcuts
 import numpy as np
 import telnetlib
 import time
-from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 import Queue
 import threading
@@ -26,7 +26,6 @@ filePath = dataShortcuts.makeFilePath()
 
 qtCreatorFile = "ScanUI.ui"  # Enter file here.
 Ui_MainWindow, QtBaseClass = uic.loadUiType(qtCreatorFile)
-
 
 
 class MyApp(QtGui.QMainWindow, Ui_MainWindow):
@@ -67,7 +66,15 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.graphHolders = [self.graphHolder1, self.graphHolder2, self.graphHolder3]
         for canvas, fig, holder in zip(self.canvases, self.figs, self.graphHolders):
             canvas.setParent(holder)
-            fig.subplots_adjust(bottom=0.7, top=0.95, right=0.69, left=0.15)  # Otherwise the axes seem to get cut off
+            fig.subplots_adjust(bottom=0.55, top=0.9, right=0.69, left=0.15)  # Otherwise the axes seem to get cut off
+
+        self.fig1Toolbar = NavigationToolbar2QT(self.canvas1, self.graphHolder1, coordinates=True)
+        self.fig2Toolbar = NavigationToolbar2QT(self.canvas2, self.graphHolder2, coordinates=True)
+        self.fig3Toolbar = NavigationToolbar2QT(self.canvas3, self.graphHolder3, coordinates=True)
+        self.toolbars = [self.fig1Toolbar, self.fig2Toolbar, self.fig3Toolbar]
+        ## Peace and Sri have this line, but it seems to break this code and be unnecessary:
+        # for toolbar, holder in zip(self.graphHolders, self.toolbars):
+        #     toolbar.setParent(holder)
 
     def updateMetadata(self):
         self.metadataTextEdit.setPlainText("Starting wavelength (nm) = " + str(self.startWaveSpinBox.value()))  # This one is setPlainText so it will clear the previous text
@@ -86,8 +93,6 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
                     axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
                     axis.plot(self.data[:, -1], self.data[:, self.axisToColDict[axis]], 'k')
                     canvas.draw()
-
-
 
     def initializeData(self):
         self.initializing = True
@@ -112,7 +117,6 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
                 self.graphChoices3.addItem(str.strip(str(splitLine[1])))
                 self.varNameToColDict[str.strip(str(splitLine[1]))] = i
                 i += 1
-
 
         # Store the variables that will be used during this data run
         self.portString = ""
@@ -141,11 +145,9 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
 
         # Initialize which plots will be shown on which axes, by default they are on the first item added
         if self.nChan > 1:
-            # Set the second box to the second index
             self.graphChoices2.setCurrentIndex(1)
         if self.nChan > 2:
             self.graphChoices3.setCurrentIndex(2)
-            # Set the third box to the thrid index
 
         for axis, box in zip(self.axes, self.graphChoiceBoxes):
             self.axisToColDict[axis] = self.varNameToColDict[str(box.currentText())]
@@ -153,13 +155,13 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.initializing = False
 
 
-    def startScan(self):
-        self.initializeData()  # Set up the GUI and initialize variables to hold data
-        topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
-        topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
-        self.data = self.takeData()
-        dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata)
-        print("Done")
+    # def startScan(self):
+    #     self.initializeData()  # Set up the GUI and initialize variables to hold data
+    #     topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
+    #     topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
+    #     self.data = self.takeData()
+    #     dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata)
+    #     print("Done")
 
     def takeData(self):
         self.takingData = True
@@ -188,12 +190,6 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
                 fullBuffer[ptsPerChan: ptsPerChan + numTakenPerChan, j] = stepData[j * numTakenPerChan: (j + 1) * numTakenPerChan]
             ptsPerChan += numTakenPerChan  # Make sure this is updated AFTER we used it in fullBuffer
 
-            # Plot the data
-            # for axis, column, canvas in zip(self.axes, self.colNums, self.canvases):
-            #     axis.cla() # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
-            #     axis.plot(fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, column], 'k')
-            #     canvas.draw()
-            
             for axis, canvas in zip(self.axes, self.canvases):
                 axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
                 axis.plot(fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, self.axisToColDict[axis]], 'k')
@@ -201,9 +197,29 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
 
             app.processEvents()  # If we don't have this line the graphs don't update until the end of data collection
 
+            # for axis, canvas in zip(self.axes, self.canvases):
+            #     p = threading.Thread(target=self.plotData, args=(axis, canvas, fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, self.axisToColDict[axis]]))
+            #     p.start()
+            # app.processEvents()  # If we don't have this line the graphs don't update until the end of data collection
+
         pydaqmx.DAQmxStopTask(self.readAI)
         self.takingData = False
         return fullBuffer
+
+    # def plotData(self, axis, canvas, x, y):
+    #     axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
+    #     axis.plot(x, y, 'k')
+    #     canvas.draw()
+
+
+    def startScan(self):
+        self.initializeData()  # Set up the GUI and initialize variables to hold data
+        topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
+        topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
+        self.data = self.takeData()
+        dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata) # If you have no metadata set metadata=None
+        print("Done")
+
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
