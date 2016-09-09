@@ -17,10 +17,10 @@ class KJLC615(LabradServer):
         print(msg)
         return msg
 
-    @setting(2, 'readPressure', msg='?', returns='?')
-    def readPressure(self):
+    @setting(2, 'readPressure', returns='?')
+    def readPressure(self, c):
         pressStr = self.ser.readline()
-        return T.Value(pressStr[1:4], 'Torr')
+        return T.Value(float(pressStr[1:4]), 'torr')
 
 __server__ = KJLC615()
 
