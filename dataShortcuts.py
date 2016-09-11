@@ -26,6 +26,8 @@ def makeFilePath():
 
     return filePath
 
+# Given a matrix of data where each data set is in its own column, and given a list of names that corresponds to each
+# column in the data set, save a .mat file with the data labelled by its name
 def saveData(data, names, file, metadata):
     # Create a dictionary where the data is referenced by the desired variable name
     dataDict = {}

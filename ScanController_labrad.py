@@ -3,17 +3,16 @@
 #                Make plotting faster or make it so that you can abort GUI without losing data (or is that already the case?)
 import sys
 from PyQt4 import QtCore, QtGui, uic
-import PyDAQmx as pydaqmx  # Python library to execute NI-DAQmx code
-import pydaqshortcuts
 import numpy as np
-import telnetlib
 import time
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 import Queue
-import threading
-import topticaShortcuts
 import dataShortcuts
+import labrad
+
+## Make sure you have started labrad and toptica_server before running this script!!
+
 
 ### Hard-coded variables ###
 dev = "Dev1/"
@@ -21,6 +20,7 @@ startTrig = "PFI0"
 waveOffset = 5  # How far away from the actual starting wavelength (in nm) we will initially slew the laser
 tUpdate = 1  # How many seconds between each update in the graph
 filePath = dataShortcuts.makeFilePath()
+Hz = labrad.types.Value(1.0,'Hz')
 #############################
 
 
@@ -36,6 +36,9 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.updateMetadata()
         self.takingData = False
         self.initializing = False
+        self.cxn = labrad.connect('localhost')
+        self.nm = labrad.types.Value(1.0, 'nm')
+        self.s = labrad.types.Value(1.0, 's')
 
         # Define interactions with the GUI
         numFields = [self.startWaveSpinBox, self.endWaveSpinBox, self.scanRateSpinBox, self.sampleRateSpinBox]
@@ -139,7 +142,7 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.stepBufferSize = self.sampleRate * tUpdate
         self.nSteps = np.ceil(self.nSamps / self.stepBufferSize)
         self.q = Queue.Queue()
-        self.tn = telnetlib.Telnet("10.0.0.2", 1998)
+        #self.tn = telnetlib.Telnet("10.0.0.2", 1998)
         self.varNames = self.aiNames
         self.varNames.append("NominalWavelength")  # We will put the nominal wavelengths as the last entry in the data array
 
@@ -155,67 +158,38 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.initializing = False
 
 
-    # def startScan(self):
-    #     self.initializeData()  # Set up the GUI and initialize variables to hold data
-    #     topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
-    #     topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
-    #     self.data = self.takeData()
-    #     dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata)
-    #     print("Done")
-
     def takeData(self):
         self.takingData = True
         time.sleep(0.5)
         print "Starting scan"
-        self.readAI = pydaqmx.TaskHandle()
-        pydaqshortcuts.makeAnalogIn(self.portString, self.readAI, self.sampFreqPerChan, self.nSampsPerChan)
-        pydaqmx.DAQmxCfgDigEdgeStartTrig(self.readAI, startTrig, pydaqmx.DAQmx_Val_Rising)  # Trigger to actually start collecting data
-        pydaqmx.DAQmxStartTask(self.readAI)
-        self.tn.write("(exec 'laser1:ctl:scan:start) \r\n")
+        self.cxn.usb6002.makeTask("readAI")
+        self.cxn.usb6002.makeAnalogIn("readAI", self.portString)
+        self.cxn.usb6002.configClock("readAI", self.sampFreqPerChan*Hz, self.nSampsPerChan)
+        self.cxn.usb6002.setTriggerRising("readAI", startTrig)
+        self.cxn.usb6002.startTask("readAI")
+        self.cxn.topticactl1500.startScan()
 
-        # Initialize some variables
-        ptsPerChan = 0
-        stepBuffer = np.zeros((int(self.stepBufferSize),), dtype=np.int16)  # Needs to be int16 to work with PyDAQmx, the DAQ units are all integers anyway
-        fullBuffer = np.zeros((int(self.nSampsPerChan), int(self.nChan)+1), dtype=np.float32)  # One extra column for the nominal wavelength. Use float32 so we can cast an int16 into it as well as put floats in
+        dataBuffer = self.cxn.usb6002.takeData("readAI", self.nSampsPerChan, self.nChan)
+        fullBuffer = np.zeros((int(self.nSampsPerChan), int(self.nChan) + 1), dtype=np.float32)  # One extra column for the nominal wavelength. Use float32 so we can cast an int16 into it as well as put floats in
         fullBuffer[:, -1] = np.linspace(self.startWave, self.endWave, self.nSampsPerChan)  # Place nominal wavelengths in the last column just so we don't have "+1" floating around the loops
-        while (self.nChan * ptsPerChan) < self.nSamps:  # While we haven't collected all the data
-            # Make a thread to grab data from the readAI task in parallel to the rest of the code
-            t = threading.Thread(target=pydaqshortcuts.putDataInQueue, args=(self.readAI, stepBuffer, self.nChan, self.q))
-            t.start()
 
-            # Retrieve the data from the queue and sort it
-            stepData = self.q.get()
-            numTakenPerChan = self.q.get().value  # The ctypes object stores the value in a python-friendly format using the .value attribute
-            for j in range(self.nChan):
-                fullBuffer[ptsPerChan: ptsPerChan + numTakenPerChan, j] = stepData[j * numTakenPerChan: (j + 1) * numTakenPerChan]
-            ptsPerChan += numTakenPerChan  # Make sure this is updated AFTER we used it in fullBuffer
+        # sort the data into a matrix
+        for i in range(self.nChan):
+            fullBuffer[:, i] = dataBuffer[i*self.nSampsPerChan: (i+1)*self.nSampsPerChan]
 
-            for axis, canvas in zip(self.axes, self.canvases):
-                axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
-                axis.plot(fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, self.axisToColDict[axis]], 'k')
-                canvas.draw()
+        for axis, canvas in zip(self.axes, self.canvases):
+            axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
+            axis.plot(fullBuffer[:, -1], fullBuffer[:, self.axisToColDict[axis]], 'k')
+            canvas.draw()
 
-            app.processEvents()  # If we don't have this line the graphs don't update until the end of data collection
-
-            # for axis, canvas in zip(self.axes, self.canvases):
-            #     p = threading.Thread(target=self.plotData, args=(axis, canvas, fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, self.axisToColDict[axis]]))
-            #     p.start()
-            # app.processEvents()  # If we don't have this line the graphs don't update until the end of data collection
-
-        pydaqmx.DAQmxStopTask(self.readAI)
+        self.cxn.usb6002.stopTask("readAI")
         self.takingData = False
         return fullBuffer
-
-    # def plotData(self, axis, canvas, x, y):
-    #     axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
-    #     axis.plot(x, y, 'k')
-    #     canvas.draw()
 
 
     def startScan(self):
         self.initializeData()  # Set up the GUI and initialize variables to hold data
-        topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
-        topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
+        self.cxn.topticactl1500.setScan( (self.startWave-waveOffset)*self.nm, self.startWave*self.nm, self.endWave*self.nm, self.scanRate*(self.nm/self.s))
         self.data = self.takeData()
         dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata) # If you have no metadata set metadata=None
         print("Done")
