@@ -52,7 +52,7 @@ def waitForSlew(telnet, wavelength):
                 "After 30 seconds we still aren't at the starting wavelength, code will now crash. Have a nice day!")
     return
 
-def thread_waitForSlow(telnet, wavelength):
+def thread_waitForSlew(telnet, wavelength):
     t = threading.Thread(target=waitForSlew, args=(telnet, wavelength))
     t.start()
     while t.isAlive():

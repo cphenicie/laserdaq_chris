@@ -14,10 +14,13 @@
 # putDataInQueue:  Fill up a specified buffer with data and put that data into a specified queue
 
 
+
 import PyDAQmx as pydaqmx  # Python library to execute NI-DAQmx code
 import ctypes # Lets us use data types compatible with C code
 import numpy as np
 import Queue
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 
 # TTLswitch is the most basic digital output class. Just make new object by specifying the dev (str, the device name),
 # port (int, the port number on the device), and line (int, the line number in the port. The built in function high()
@@ -118,3 +121,68 @@ def putDataInQueue(taskHandle, dataBuffer, nChan, queue):
     queue.put(dataBuffer)
     queue.put(read)
     return
+
+def continuouslyUpdatePlot(canvas, fig, axis, taskHandle, fSamp, nSamp, app):
+    print("starting piezo scan")
+    def animate(i):
+        axis.cla()
+        pydaqmx.DAQmxStartTask(taskHandle)
+
+        ## Read from the specified line(s)
+        # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
+        nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
+        timeout = -1  # -1 means wait indefinitely to read the samples
+        fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+        read = pydaqmx.int32()
+        data = np.zeros((int(nSamp),), dtype=np.int16)
+        readArr = data  # The array to read the samples into
+        # arrSize = c_uint32(int(nSamp)).value  # size of the read array
+        arrSize = pydaqmx.uInt32(nSamp)
+        sampsPerChanRead = ctypes.byref(read)
+        pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize, sampsPerChanRead, None)
+
+        pydaqmx.DAQmxStopTask(taskHandle)
+        # filename = "test.csv"
+        # np.savetxt(filename, data, delimiter=",")
+        tMS = (np.arange(0, nSamp) / float(fSamp)) * 1e3
+        dataCal = data * (20.0 / 2 ** 16)
+        axis.plot(tMS, dataCal)
+        # plt.plot(data)
+        #plt.xlabel('Time (ms)')
+        #plt.ylabel('Signal (V)')
+
+    ani = animation.FuncAnimation(fig, animate, interval=500)
+    #plt.show()
+    canvas.draw()
+    #app.processEvents() # Tell the app that's calling this to update
+    return ani
+
+
+def makeUpdatingGraph(i, axis, taskHandle, fSamp, nSamp):
+    axis.cla()
+    pydaqmx.DAQmxStartTask(taskHandle)
+
+    ## Read from the specified line(s)
+    # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
+    nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
+    timeout = -1  # -1 means wait indefinitely to read the samples
+    fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+    read = pydaqmx.int32()
+    data = np.zeros((int(nSamp),), dtype=np.int16)
+    readArr = data  # The array to read the samples into
+    # arrSize = c_uint32(int(nSamp)).value  # size of the read array
+    arrSize = pydaqmx.uInt32(nSamp)
+    sampsPerChanRead = ctypes.byref(read)
+    pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize, sampsPerChanRead, None)
+
+    pydaqmx.DAQmxStopTask(taskHandle)
+    # filename = "test.csv"
+    # np.savetxt(filename, data, delimiter=",")
+    tMS = (np.arange(0, nSamp) / float(fSamp)) * 1e3
+    dataCal = data * (20.0 / 2 ** 16)
+    axis.plot(tMS, dataCal)
+    # plt.plot(data)
+    # plt.xlabel('Time (ms)')
+    # plt.ylabel('Signal (V)')
+
+
