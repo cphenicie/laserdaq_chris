@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1175</width>
+    <width>1205</width>
     <height>894</height>
    </rect>
   </property>
@@ -70,7 +70,7 @@
       <property name="geometry">
        <rect>
         <x>900</x>
-        <y>470</y>
+        <y>510</y>
         <width>231</width>
         <height>131</height>
        </rect>
@@ -79,7 +79,7 @@
      <widget class="QComboBox" name="graphChoices2">
       <property name="geometry">
        <rect>
-        <x>610</x>
+        <x>590</x>
         <y>280</y>
         <width>121</width>
         <height>22</height>
@@ -99,7 +99,7 @@
      <widget class="QComboBox" name="graphChoices3">
       <property name="geometry">
        <rect>
-        <x>610</x>
+        <x>590</x>
         <y>550</y>
         <width>121</width>
         <height>22</height>
@@ -109,7 +109,7 @@
      <widget class="Line" name="line">
       <property name="geometry">
        <rect>
-        <x>740</x>
+        <x>710</x>
         <y>0</y>
         <width>20</width>
         <height>811</height>
@@ -236,7 +236,7 @@
       <property name="geometry">
        <rect>
         <x>957</x>
-        <y>620</y>
+        <y>660</y>
         <width>121</width>
         <height>31</height>
        </rect>
@@ -254,7 +254,7 @@
       <property name="geometry">
        <rect>
         <x>900</x>
-        <y>430</y>
+        <y>470</y>
         <width>231</width>
         <height>20</height>
        </rect>
@@ -300,7 +300,7 @@ ai2: Reference</string>
      <widget class="QComboBox" name="graphChoices1">
       <property name="geometry">
        <rect>
-        <x>610</x>
+        <x>590</x>
         <y>10</y>
         <width>121</width>
         <height>22</height>
@@ -389,7 +389,7 @@ ai2: Reference</string>
       <property name="geometry">
        <rect>
         <x>817</x>
-        <y>430</y>
+        <y>470</y>
         <width>71</width>
         <height>20</height>
        </rect>
@@ -407,7 +407,7 @@ ai2: Reference</string>
       <property name="geometry">
        <rect>
         <x>817</x>
-        <y>470</y>
+        <y>510</y>
         <width>71</width>
         <height>21</height>
        </rect>
@@ -421,6 +421,37 @@ ai2: Reference</string>
        <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Metadata&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
       </property>
      </widget>
+     <widget class="QLabel" name="label_18">
+      <property name="geometry">
+       <rect>
+        <x>720</x>
+        <y>430</y>
+        <width>101</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Save Dir</string>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="mechSaveFolderLineEdit">
+      <property name="geometry">
+       <rect>
+        <x>790</x>
+        <y>430</y>
+        <width>351</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>I:\thompsonlab\REI\Daily\</string>
+      </property>
+     </widget>
     </widget>
     <widget class="QWidget" name="tab_2">
      <attribute name="title">
@@ -431,7 +462,7 @@ ai2: Reference</string>
        <rect>
         <x>10</x>
         <y>10</y>
-        <width>621</width>
+        <width>641</width>
         <height>261</height>
        </rect>
       </property>
@@ -439,8 +470,8 @@ ai2: Reference</string>
      <widget class="QPushButton" name="startPiezoScanButton">
       <property name="geometry">
        <rect>
-        <x>650</x>
-        <y>200</y>
+        <x>150</x>
+        <y>290</y>
         <width>91</width>
         <height>23</height>
        </rect>
@@ -452,8 +483,8 @@ ai2: Reference</string>
      <widget class="QPushButton" name="stopPiezoScanButton">
       <property name="geometry">
        <rect>
-        <x>650</x>
-        <y>240</y>
+        <x>150</x>
+        <y>330</y>
         <width>91</width>
         <height>23</height>
        </rect>
@@ -465,8 +496,8 @@ ai2: Reference</string>
      <widget class="QLabel" name="label_10">
       <property name="geometry">
        <rect>
-        <x>810</x>
-        <y>360</y>
+        <x>760</x>
+        <y>180</y>
         <width>71</width>
         <height>20</height>
        </rect>
@@ -480,30 +511,12 @@ ai2: Reference</string>
        <string>File name</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_15">
+     <widget class="QPushButton" name="savePiezoDataContButton">
       <property name="geometry">
        <rect>
-        <x>793</x>
-        <y>280</y>
-        <width>161</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Piezo Scan Rate (Hz)</string>
-      </property>
-     </widget>
-     <widget class="QPushButton" name="savePiezoDataButton">
-      <property name="geometry">
-       <rect>
-        <x>950</x>
-        <y>550</y>
-        <width>121</width>
+        <x>750</x>
+        <y>410</y>
+        <width>141</width>
         <height>31</height>
        </rect>
       </property>
@@ -513,14 +526,14 @@ ai2: Reference</string>
        </font>
       </property>
       <property name="text">
-       <string>Save Data</string>
+       <string>Save Continuously</string>
       </property>
      </widget>
-     <widget class="QPlainTextEdit" name="metadataTextEdit_2">
+     <widget class="QPlainTextEdit" name="metadataTextEdit_piezo">
       <property name="geometry">
        <rect>
-        <x>893</x>
-        <y>400</y>
+        <x>853</x>
+        <y>220</y>
         <width>231</width>
         <height>131</height>
        </rect>
@@ -529,10 +542,10 @@ ai2: Reference</string>
      <widget class="QLabel" name="label_14">
       <property name="geometry">
        <rect>
-        <x>760</x>
-        <y>90</y>
+        <x>740</x>
+        <y>20</y>
         <width>371</width>
-        <height>121</height>
+        <height>51</height>
        </rect>
       </property>
       <property name="font">
@@ -544,59 +557,11 @@ ai2: Reference</string>
        <string>Piezo Scan Parameters</string>
       </property>
      </widget>
-     <widget class="QLabel" name="label_13">
-      <property name="geometry">
-       <rect>
-        <x>823</x>
-        <y>320</y>
-        <width>131</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="text">
-       <string>Refresh Rate (Hz)</string>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="scanRateSpinBox_2">
-      <property name="geometry">
-       <rect>
-        <x>963</x>
-        <y>280</y>
-        <width>101</width>
-        <height>22</height>
-       </rect>
-      </property>
-      <property name="font">
-       <font>
-        <pointsize>12</pointsize>
-       </font>
-      </property>
-      <property name="decimals">
-       <number>4</number>
-      </property>
-      <property name="minimum">
-       <double>0.002400000000000</double>
-      </property>
-      <property name="maximum">
-       <double>10.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.100000000000000</double>
-      </property>
-      <property name="value">
-       <double>1.000000000000000</double>
-      </property>
-     </widget>
      <widget class="QLabel" name="label_11">
       <property name="geometry">
        <rect>
-        <x>810</x>
-        <y>400</y>
+        <x>770</x>
+        <y>220</y>
         <width>71</width>
         <height>21</height>
        </rect>
@@ -613,8 +578,8 @@ ai2: Reference</string>
      <widget class="QDoubleSpinBox" name="piezoCenterSpinBox">
       <property name="geometry">
        <rect>
-        <x>963</x>
-        <y>240</y>
+        <x>853</x>
+        <y>100</y>
         <width>101</width>
         <height>22</height>
        </rect>
@@ -640,25 +605,25 @@ ai2: Reference</string>
        <double>1515.000000000000000</double>
       </property>
      </widget>
-     <widget class="QLineEdit" name="fileNameLineEdit_2">
+     <widget class="QLineEdit" name="fileNameLineEdit_piezo">
       <property name="geometry">
        <rect>
-        <x>893</x>
-        <y>360</y>
+        <x>853</x>
+        <y>180</y>
         <width>231</width>
         <height>20</height>
        </rect>
       </property>
       <property name="text">
-       <string>test</string>
+       <string>piezoData</string>
       </property>
      </widget>
      <widget class="QLabel" name="label_12">
       <property name="geometry">
        <rect>
-        <x>763</x>
-        <y>240</y>
-        <width>191</width>
+        <x>670</x>
+        <y>100</y>
+        <width>181</width>
         <height>20</height>
        </rect>
       </property>
@@ -671,12 +636,213 @@ ai2: Reference</string>
        <string>Center Wavelength (nm)</string>
       </property>
      </widget>
-     <widget class="QDoubleSpinBox" name="sampleRateSpinBox_2">
+     <widget class="QComboBox" name="graphChoicesPiezo">
       <property name="geometry">
        <rect>
-        <x>963</x>
+        <x>660</x>
+        <y>520</y>
+        <width>121</width>
+        <height>22</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="startPiezoSamplingButton">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>290</y>
+        <width>81</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Start Sampling</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="stopPiezoSamplingButton">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>330</y>
+        <width>81</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Stop Sampling</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="resetDeviceButton">
+      <property name="geometry">
+       <rect>
+        <x>970</x>
+        <y>780</y>
+        <width>91</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Reset USB6002</string>
+      </property>
+     </widget>
+     <widget class="QPushButton" name="startPDBButton">
+      <property name="geometry">
+       <rect>
+        <x>1070</x>
+        <y>780</y>
+        <width>75</width>
+        <height>23</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Start PDB</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkBox">
+      <property name="geometry">
+       <rect>
+        <x>490</x>
+        <y>270</y>
+        <width>161</width>
+        <height>41</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Autoscale y-axis</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+      <property name="tristate">
+       <bool>false</bool>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="customRangeMinSpinBox">
+      <property name="geometry">
+       <rect>
+        <x>480</x>
+        <y>360</y>
+        <width>81</width>
+        <height>22</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="decimals">
+       <number>4</number>
+      </property>
+      <property name="minimum">
+       <double>-1000.000000000000000</double>
+      </property>
+      <property name="maximum">
+       <double>1000.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.010000000000000</double>
+      </property>
+      <property name="value">
+       <double>-0.262000000000000</double>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_9">
+      <property name="geometry">
+       <rect>
+        <x>520</x>
         <y>320</y>
-        <width>101</width>
+        <width>111</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>14</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Fixed y-axis</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_13">
+      <property name="geometry">
+       <rect>
+        <x>510</x>
+        <y>340</y>
+        <width>31</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Min</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_15">
+      <property name="geometry">
+       <rect>
+        <x>590</x>
+        <y>340</y>
+        <width>31</width>
+        <height>21</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Max</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_16">
+      <property name="geometry">
+       <rect>
+        <x>660</x>
+        <y>140</y>
+        <width>91</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Save Dir</string>
+      </property>
+     </widget>
+     <widget class="QLineEdit" name="piezoSaveFolderLineEdit">
+      <property name="geometry">
+       <rect>
+        <x>720</x>
+        <y>140</y>
+        <width>411</width>
+        <height>20</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>I:\thompsonlab\REI\Daily\</string>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="rolloverSpinBox">
+      <property name="geometry">
+       <rect>
+        <x>853</x>
+        <y>370</y>
+        <width>61</width>
         <height>22</height>
        </rect>
       </property>
@@ -689,25 +855,91 @@ ai2: Reference</string>
        <number>0</number>
       </property>
       <property name="minimum">
-       <double>0.000000000000000</double>
+       <double>1.000000000000000</double>
       </property>
       <property name="maximum">
-       <double>50000.000000000000000</double>
+       <double>100000.000000000000000</double>
       </property>
       <property name="singleStep">
-       <double>1000.000000000000000</double>
+       <double>1.000000000000000</double>
       </property>
       <property name="value">
-       <double>1000.000000000000000</double>
+       <double>500.000000000000000</double>
       </property>
      </widget>
-     <widget class="QComboBox" name="graphChoicesPiezo">
+     <widget class="QPushButton" name="savePiezoDataOnceButton">
       <property name="geometry">
        <rect>
-        <x>650</x>
-        <y>10</y>
-        <width>121</width>
+        <x>980</x>
+        <y>410</y>
+        <width>141</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Save One File</string>
+      </property>
+     </widget>
+     <widget class="QLabel" name="label_17">
+      <property name="geometry">
+       <rect>
+        <x>700</x>
+        <y>370</y>
+        <width>141</width>
+        <height>16</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="text">
+       <string>Acquisitions per file</string>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="customRangeMaxSpinBox">
+      <property name="geometry">
+       <rect>
+        <x>570</x>
+        <y>360</y>
+        <width>81</width>
         <height>22</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <pointsize>12</pointsize>
+       </font>
+      </property>
+      <property name="decimals">
+       <number>4</number>
+      </property>
+      <property name="minimum">
+       <double>-1000.000000000000000</double>
+      </property>
+      <property name="maximum">
+       <double>1000.000000000000000</double>
+      </property>
+      <property name="singleStep">
+       <double>0.010000000000000</double>
+      </property>
+      <property name="value">
+       <double>-0.242000000000000</double>
+      </property>
+     </widget>
+     <widget class="QWidget" name="graphHolder5" native="true">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>520</y>
+        <width>641</width>
+        <height>261</height>
        </rect>
       </property>
      </widget>
@@ -719,7 +951,7 @@ ai2: Reference</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1175</width>
+     <width>1205</width>
      <height>21</height>
     </rect>
    </property>

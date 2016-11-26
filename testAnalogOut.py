@@ -11,29 +11,25 @@ pydaqmx.DAQmxCreateTask(taskName, input1Pointer)
 
 chan = 'Dev1/ao1'  # Location of the channel (this should be a physical channel, but it will be used as a virtual channel?)
 chanName = ""  # Name(s) to assign to the created virtual channel(s). "" means physical channel name will be used
-type = pydaqmx.DAQmx_Val_Sine  # Is this singled/double referenced, differential, etc.\
-freq = pydaqmx.float64(10.0)
-amp = pydaqmx.float64(10.0)
-offset = pydaqmx.float64(0)
-#pydaqmx.DAQmxCreateAOFuncGenChan(outScan, chan, chanName, type, freq, amp, offset)
 
 minVal = pydaqmx.float64(-10.0)
 maxVal = pydaqmx.float64(10.0)
 units = pydaqmx.DAQmx_Val_Volts
 pydaqmx.DAQmxCreateAOVoltageChan(outScan, chan, chanName, minVal, maxVal, units, 0)
 
-fSamp = 5000
+fSamp = 1000
 nSamp = 1000
-amp = 10
+freq = 50 # Frequency in Hertz
+amp = 10 # Amplitude in volts
 source = None  # If you use an external clock, specify here, otherwise it should be None
 rate = pydaqmx.float64(fSamp) # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
 edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
 sampMode = pydaqmx.DAQmx_Val_ContSamps  # Acquire samples continuously or just a finite number of samples
-sampPerChan = pydaqmx.uInt64(nSamp*1)  # Total number of sample to acquire for each channel
+sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
 pydaqmx.DAQmxCfgSampClkTiming(outScan, source, rate, edge, sampMode, sampPerChan)
 
 #writeArray = np.zeros((int(nSamp),), dtype=np.float64)
-x = np.array(range(nSamp*1))/5.0
+x = 2*np.pi*freq*np.array(range(nSamp))/1000.0
 writeArray = np.array(amp*np.sin(x), dtype=np.float64)
 written = pydaqmx.int32()
 nSampPerChan = pydaqmx.int32(nSamp)

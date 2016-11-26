@@ -122,43 +122,95 @@ def putDataInQueue(taskHandle, dataBuffer, nChan, queue):
     queue.put(read)
     return
 
-def continuouslyUpdatePlot(canvas, fig, axis, taskHandle, fSamp, nSamp, app):
-    print("starting piezo scan")
-    def animate(i):
-        axis.cla()
-        pydaqmx.DAQmxStartTask(taskHandle)
 
-        ## Read from the specified line(s)
-        # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
-        nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
-        timeout = -1  # -1 means wait indefinitely to read the samples
-        fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
-        read = pydaqmx.int32()
-        data = np.zeros((int(nSamp),), dtype=np.int16)
-        readArr = data  # The array to read the samples into
-        # arrSize = c_uint32(int(nSamp)).value  # size of the read array
-        arrSize = pydaqmx.uInt32(nSamp)
-        sampsPerChanRead = ctypes.byref(read)
-        pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize, sampsPerChanRead, None)
+# Create an output sine wave (apparently DAQmxCreateAOFunGenChan doesn't work with the 6002?
+def makeAnalogOut(portString, handle, freq, amp, offset, waveform):
+    outScan = handle
+    taskName = ''  # Name of the task (I don't know when this would not be an empty string...)
+    input1Pointer = ctypes.byref(outScan)  # Equivalent to &setStates in C, the pointer to the task handle
+    pydaqmx.DAQmxCreateTask(taskName, input1Pointer)
 
-        pydaqmx.DAQmxStopTask(taskHandle)
-        # filename = "test.csv"
-        # np.savetxt(filename, data, delimiter=",")
-        tMS = (np.arange(0, nSamp) / float(fSamp)) * 1e3
-        dataCal = data * (20.0 / 2 ** 16)
-        axis.plot(tMS, dataCal)
-        # plt.plot(data)
-        #plt.xlabel('Time (ms)')
-        #plt.ylabel('Signal (V)')
+    chan = portString  # Location of the channel (this should be a physical channel, but it will be used as a virtual channel?)
+    chanName = ""  # Name(s) to assign to the created virtual channel(s). "" means physical channel name will be used
 
-    ani = animation.FuncAnimation(fig, animate, interval=500)
-    #plt.show()
-    canvas.draw()
-    #app.processEvents() # Tell the app that's calling this to update
-    return ani
+    minVal = pydaqmx.float64(-10.0)
+    maxVal = pydaqmx.float64(10.0)
+    units = pydaqmx.DAQmx_Val_Volts
+    pydaqmx.DAQmxCreateAOVoltageChan(outScan, chan, chanName, minVal, maxVal, units, 0)
+
+    fSamp = 1000
+    nSamp = 1000
+    source = None  # If you use an external clock, specify here, otherwise it should be None
+    rate = pydaqmx.float64(
+        fSamp)  # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
+    edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
+    sampMode = pydaqmx.DAQmx_Val_ContSamps  # Acquire samples continuously or just a finite number of samples
+    sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
+    pydaqmx.DAQmxCfgSampClkTiming(outScan, source, rate, edge, sampMode, sampPerChan)
+
+    # writeArray = np.zeros((int(nSamp),), dtype=np.float64)
+    if waveform == 'sin':
+        x = 2 * np.pi * freq * np.array(range(nSamp)) / 1000.0
+        writeArray = np.array(amp * np.sin(x) + offset, dtype=np.float64)
+    if waveform == 'saw':
+        # The amplitude is the peak-to-peak voltage in this waveform
+        if freq != np.ceil(freq):
+            print("I don't understand decimals yet, the frequency I'm actually using is " +str(np.ceil(freq)+"Hz"))
+        writeArray = amp/1000.0*(np.array(range(1000)) * freq % 1000) + offset
 
 
-def makeUpdatingGraph(i, axis, taskHandle, fSamp, nSamp):
+    written = pydaqmx.int32()
+    nSampPerChan = pydaqmx.int32(nSamp)
+    pydaqmx.DAQmxWriteAnalogF64(outScan, nSampPerChan, pydaqmx.bool32(0), pydaqmx.DAQmx_Val_WaitInfinitely,
+                                pydaqmx.DAQmx_Val_GroupByChannel, writeArray, ctypes.byref(written), None)
+
+
+# def continuouslyUpdatePlot(canvas, fig, axis, taskHandle, fSamp, nSamp, app):
+#     print("starting piezo scan")
+#     def animate(i):
+#         axis.cla()
+#         pydaqmx.DAQmxStartTask(taskHandle)
+#
+#         ## Read from the specified line(s)
+#         # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
+#         nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
+#         timeout = -1  # -1 means wait indefinitely to read the samples
+#         fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+#         read = pydaqmx.int32()
+#         data = np.zeros((int(nSamp),), dtype=np.int16)
+#         readArr = data  # The array to read the samples into
+#         # arrSize = c_uint32(int(nSamp)).value  # size of the read array
+#         arrSize = pydaqmx.uInt32(nSamp)
+#         sampsPerChanRead = ctypes.byref(read)
+#         pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize, sampsPerChanRead, None)
+#
+#         pydaqmx.DAQmxStopTask(taskHandle)
+#         # filename = "test.csv"
+#         # np.savetxt(filename, data, delimiter=",")
+#         tMS = (np.arange(0, nSamp) / float(fSamp)) * 1e3
+#
+#         # freq = 20
+#         # amp = 10
+#         # offset = 0
+#         # tMS = amp / 1000.0 * (np.array(range(1000)) * freq % 1000) + offset
+#         # dataCal = data * (20.0 / 2 ** 16)
+#         # axis.plot(tMS, dataCal)
+#
+#         # plt.plot(data)
+#         #plt.xlabel('Time (ms)')
+#         #plt.ylabel('Signal (V)')
+#
+#     ani = animation.FuncAnimation(fig, animate, interval=500)
+#     #plt.show()
+#     canvas.draw()
+#     #app.processEvents() # Tell the app that's calling this to update
+#     return ani
+
+
+
+
+def makeUpdatingGraph(i, axis, taskHandle, nSamp, arcFactor, arcOffset, piezoQ):
+    piezoCal = 177 # Calibration between piezo voltage and frequency detuning in MHz/V
     axis.cla()
     pydaqmx.DAQmxStartTask(taskHandle)
 
@@ -166,23 +218,133 @@ def makeUpdatingGraph(i, axis, taskHandle, fSamp, nSamp):
     # int32 DAQmxReadBinaryI16 (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, int16 readArray[], uInt32 arraySizeInSamps, int32 *sampsPerChanRead, bool32 *reserved);
     nSampsPerChan = -1  # -1 in finite mode means wait until all samples are collected and read them
     timeout = -1  # -1 means wait indefinitely to read the samples
-    fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+    # fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies if you want to prioritize by lowest channel or lowest sample (if you have mutiple channels each getting multiple samples)
+    fillMode = pydaqmx.DAQmx_Val_GroupByScanNumber
     read = pydaqmx.int32()
-    data = np.zeros((int(nSamp),), dtype=np.int16)
+    data = np.zeros((int(2*nSamp),), dtype=np.int16) # Factor of two because we are also collecting the piezo voltage interleaved
     readArr = data  # The array to read the samples into
     # arrSize = c_uint32(int(nSamp)).value  # size of the read array
+
+    # I'm pretty sure I should be using arrSize2, but I'm not positive...
     arrSize = pydaqmx.uInt32(nSamp)
+    arrSize2 = pydaqmx.uInt32(2*nSamp)
+
     sampsPerChanRead = ctypes.byref(read)
-    pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize, sampsPerChanRead, None)
-
+    pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, readArr, arrSize2, sampsPerChanRead, None)
+    #import time
+    #time.sleep(0.1)
     pydaqmx.DAQmxStopTask(taskHandle)
-    # filename = "test.csv"
-    # np.savetxt(filename, data, delimiter=",")
-    tMS = (np.arange(0, nSamp) / float(fSamp)) * 1e3
-    dataCal = data * (20.0 / 2 ** 16)
-    axis.plot(tMS, dataCal)
-    # plt.plot(data)
-    # plt.xlabel('Time (ms)')
-    # plt.ylabel('Signal (V)')
 
 
+    coeffs = np.zeros(4)
+    coeffsPointer = coeffs.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    pydaqmx.DAQmxGetAIDevScalingCoeff(taskHandle, 'Dev1/ai2:3', coeffsPointer, 4)
+
+
+    # import pdb
+    # pdb.set_trace()
+
+    # topticaOutDAQUnits = []
+    # dataInDAQUnits = []
+    # for j in range(2*nSamp):
+    #     if j%2 == 0:
+    #         dataInDAQUnits.append(data[j])
+    #     else:
+    #         topticaOutDAQUnits.append(data[j])
+
+
+
+    # dataInVolts = [coeffs[0] + j*coeffs[1] + j**2*coeffs[2] + j**3 * coeffs[3] for j in dataInDAQUnits]
+    #
+    # topticaOutVolts = [coeffs[0] + j*coeffs[1] for j in topticaOutDAQUnits]
+    # piezoVoltage = [arcOffset + arcFactor*j for j in topticaOutVolts]
+    # detuning = [piezoCal * j for j in piezoVoltage]
+    #
+    #
+    #
+    # axis.plot(detuning, dataInVolts,'r-')
+    # #axis.set_xlim([0, 10])
+    # #axis.set_ylim([0, 10])
+    # axis.set_xlabel("Detuning (MHz)")
+
+    axis.plot(data[1::2], data[0::2])
+    piezoQ.put(data)
+    if i > iEnd:
+
+
+
+    print(i)
+
+
+
+def makeAnalogInSource(portString, handle, source, fSamp, nSamp):
+
+    ## Create a task out of an existing handle
+    # int32 DAQmxCreateTask (const char taskName[], TaskHandle *taskHandle);
+    taskName = ''  # Name of the task (I don't know when this would not be an empty string...)
+    input1Pointer = ctypes.byref(handle)  # Equivalent to &setStates in C, the pointer to the task handle
+    pydaqmx.DAQmxCreateTask(taskName, input1Pointer)
+
+    ## Create Analog In voltage channel
+    # int32 DAQmxCreateAIVoltageChan (TaskHandle taskHandle, const char physicalChannel[], const char nameToAssignToChannel[], int32 terminalConfig, float64 minVal, float64 maxVal, int32 units, const char customScaleName[]);
+    chan = portString  # Location of the channel (this should be a physical channel, but it will be used as a virtual channel?)
+    chanName = ""  # Name(s) to assign to the created virtual channel(s). "" means physical channel name will be used
+    termConfig = pydaqmx.DAQmx_Val_Diff  # Is this singled/double referenced, differential, etc.\
+    vMin = -10  # Minimum voltage you expect to measure (in units described by variable "units" below)
+    vMax = 10  # Maximum voltage you expect to measure
+    units = pydaqmx.DAQmx_Val_Volts  # Units used in vMax/vMin.
+    custUnits = None  # If units where DAQmx_Val_FromCustomScale, specify scale. Otherwise, it should be None
+    pydaqmx.DAQmxCreateAIVoltageChan(handle, chan, chanName, termConfig, vMin, vMax, units, custUnits)
+
+    ## Configure the clock
+    # int32 DAQmxCfgSampClkTiming (TaskHandle taskHandle, const char source[], float64 rate, int32 activeEdge, int32 sampleMode, uInt64 sampsPerChanToAcquire);
+    #source = None  # If you use an external clock, specify here, otherwise it should be None
+    rate = pydaqmx.float64(fSamp) # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
+    edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
+    sampMode = pydaqmx.DAQmx_Val_FiniteSamps  # Acquire samples continuously or just a finite number of samples
+    sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
+    pydaqmx.DAQmxCfgSampClkTiming(handle, source, rate, edge, sampMode, sampPerChan)
+
+
+
+
+
+def makeAnalogOutSource(portString, handle, source, freq, amp, offset, waveform):
+    outScan = handle
+    taskName = ''  # Name of the task (I don't know when this would not be an empty string...)
+    input1Pointer = ctypes.byref(outScan)  # Equivalent to &setStates in C, the pointer to the task handle
+    pydaqmx.DAQmxCreateTask(taskName, input1Pointer)
+
+    chan = portString  # Location of the channel (this should be a physical channel, but it will be used as a virtual channel?)
+    chanName = ""  # Name(s) to assign to the created virtual channel(s). "" means physical channel name will be used
+
+    minVal = pydaqmx.float64(-10.0)
+    maxVal = pydaqmx.float64(10.0)
+    units = pydaqmx.DAQmx_Val_Volts
+    pydaqmx.DAQmxCreateAOVoltageChan(outScan, chan, chanName, minVal, maxVal, units, 0)
+
+    fSamp = 1000
+    nSamp = 1000
+    #source = None  # If you use an external clock, specify here, otherwise it should be None
+    rate = pydaqmx.float64(
+        fSamp)  # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
+    edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
+    sampMode = pydaqmx.DAQmx_Val_ContSamps  # Acquire samples continuously or just a finite number of samples
+    sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
+    pydaqmx.DAQmxCfgSampClkTiming(outScan, source, rate, edge, sampMode, sampPerChan)
+
+    # writeArray = np.zeros((int(nSamp),), dtype=np.float64)
+    if waveform == 'sin':
+        x = 2 * np.pi * freq * np.array(range(nSamp)) / 1000.0
+        writeArray = np.array(amp * np.sin(x) + offset, dtype=np.float64)
+    if waveform == 'saw':
+        # The amplitude is the peak-to-peak voltage in this waveform
+        if freq != np.ceil(freq):
+            print("I don't understand decimals yet, the frequency I'm actually using is " +str(np.ceil(freq)+"Hz"))
+        writeArray = amp/1000.0*(np.array(range(1000)) * freq % 1000) + offset
+
+
+    written = pydaqmx.int32()
+    nSampPerChan = pydaqmx.int32(nSamp)
+    pydaqmx.DAQmxWriteAnalogF64(outScan, nSampPerChan, pydaqmx.bool32(0), pydaqmx.DAQmx_Val_WaitInfinitely,
+                                pydaqmx.DAQmx_Val_GroupByChannel, writeArray, ctypes.byref(written), None)

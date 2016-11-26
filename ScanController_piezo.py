@@ -15,13 +15,16 @@ import threading
 import topticaShortcuts
 import dataShortcuts
 import matplotlib.animation as animation
+import ctypes
+import pdb
 
 ### Hard-coded variables ###
 dev = "Dev1/"
 startTrig = "PFI0"
 waveOffset = 5  # How far away from the actual starting wavelength (in nm) we will initially slew the laser
 tUpdate = 1  # How many seconds between each update in the graph
-filePath = dataShortcuts.makeFilePath()
+#filePath = dataShortcuts.makeFilePath()
+filePath = dataShortcuts.genFilePath()
 #############################
 
 
@@ -38,6 +41,10 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.takingData = False
         self.initializing = False
 
+        # Update save directory
+        self.mechSaveFolderLineEdit.setText(filePath)
+        self.piezoSaveFolderLineEdit.setText(filePath)
+
         # Define interactions with the GUI
         numFields = [self.startWaveSpinBox, self.endWaveSpinBox, self.scanRateSpinBox, self.sampleRateSpinBox]
         textFields = [self.inputsTextEdit, self.fileNameLineEdit]
@@ -45,6 +52,8 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         [field.textChanged.connect(self.updateMetadata) for field in textFields]
         self.startScanButton.clicked.connect(self.startScan)
         self.piezoCenterSpinBox.valueChanged.connect(lambda: self.setWavelength(self.piezoCenterSpinBox.value()))
+        #self.piezoScanRateSpinBox.valueChanged.connect(self.updatePiezoScan)
+        #self.samplingRateSpinBox.valueChanged.connect(self.updatePiezoSampling)
 
         self.graphChoiceBoxes = [self.graphChoices1, self.graphChoices2, self.graphChoices3]
         [box.currentIndexChanged.connect(self.changeGraph) for box in self.graphChoiceBoxes]
@@ -52,6 +61,14 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
 
         self.startPiezoScanButton.clicked.connect(self.startPiezoScan)
         self.stopPiezoScanButton.clicked.connect(self.stopPiezoScan)
+        self.startPiezoSamplingButton.clicked.connect(self.startPiezoSampling)
+        self.stopPiezoSamplingButton.clicked.connect(self.stopPiezoSampling)
+        self.samplingRunning = False
+        self.piezoScanRunning = False
+        self.killPiezoScan = False
+
+        self.resetDeviceButton.clicked.connect(self.resetDevice)
+        self.startPDBButton.clicked.connect(self.startPDB)
 
         # Initialize graphs
         self.figHand1 = Figure()
@@ -68,7 +85,7 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.axHand4 = self.figHand4.add_subplot(111)
         self.canvas4 = FigureCanvasQTAgg(self.figHand4)
         self.canvas4.setParent(self.graphHolder4)
-        self.figHand4.subplots_adjust(bottom=0.55, top=0.9, right=0.90, left=0.10)
+        self.figHand4.subplots_adjust(bottom=0.55, top=0.9, right=0.97, left=0.1)
         self.fig4Toolbar = NavigationToolbar2QT(self.canvas4, self.graphHolder4, coordinates=True)
 
 
@@ -89,6 +106,17 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         ## Peace and Sri have this line, but it seems to break this code and be unnecessary:
         # for toolbar, holder in zip(self.graphHolders, self.toolbars):
         #     toolbar.setParent(holder)
+
+        #self.tn = telnetlib.Telnet("10.0.0.2", 1998)
+        self.laser = topticaShortcuts.TopticaDLCPro()
+        self.tn = self.laser.tn
+
+
+
+
+
+
+
 
     def updateMetadata(self):
         self.metadataTextEdit.setPlainText("Starting wavelength (nm) = " + str(self.startWaveSpinBox.value()))  # This one is setPlainText so it will clear the previous text
@@ -145,7 +173,8 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.scanRate = self.scanRateSpinBox.value()
         self.sampleRate = self.sampleRateSpinBox.value()
         self.inputs = self.inputsTextEdit.toPlainText()
-        self.fileName = self.fileNameLineEdit.text()
+        self.saveDir = str(self.mechSaveFolderLineEdit.text())
+        self.fileName = str(self.fileNameLineEdit.text())
         self.metadata = self.metadataTextEdit.toPlainText()
         self.nChan = len(self.aiPorts)
         self.sampFreqPerChan = self.sampleRate / self.nChan
@@ -155,7 +184,7 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.stepBufferSize = self.sampleRate * tUpdate
         self.nSteps = np.ceil(self.nSamps / self.stepBufferSize)
         self.q = Queue.Queue()
-        self.tn = telnetlib.Telnet("10.0.0.2", 1998)
+        #self.tn = telnetlib.Telnet("10.0.0.2", 1998) # move to constructor
         self.varNames = self.aiNames
         self.varNames.append("NominalWavelength")  # We will put the nominal wavelengths as the last entry in the data array
 
@@ -172,13 +201,6 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.initializing = False
 
 
-    # def startScan(self):
-    #     self.initializeData()  # Set up the GUI and initialize variables to hold data
-    #     topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
-    #     topticaShortcuts.thread_waitForSlow(self.tn, self.startWave - waveOffset)
-    #     self.data = self.takeData()
-    #     dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata)
-    #     print("Done")
 
     def takeData(self):
         self.takingData = True
@@ -197,6 +219,7 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         fullBuffer[:, -1] = np.linspace(self.startWave, self.endWave, self.nSampsPerChan)  # Place nominal wavelengths in the last column just so we don't have "+1" floating around the loops
         while (self.nChan * ptsPerChan) < self.nSamps:  # While we haven't collected all the data
             # Make a thread to grab data from the readAI task in parallel to the rest of the code
+            #  NOTE: should this be in the while loop? Or executed right before the while loop starts?
             t = threading.Thread(target=pydaqshortcuts.putDataInQueue, args=(self.readAI, stepBuffer, self.nChan, self.q))
             t.start()
 
@@ -210,6 +233,8 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
             for axis, canvas in zip(self.axes, self.canvases):
                 axis.cla()  # Clear the axes so that we aren't re-drawing the old data underneath the new data (which slows down plotting ~1.5x)
                 axis.plot(fullBuffer[0:ptsPerChan, -1], fullBuffer[0:ptsPerChan, self.axisToColDict[axis]], 'k')
+                axis.get_xaxis().get_major_formatter().set_useOffset(False)
+                #axis.get_xaxis().get_major_formatter().set_scientific(False)
                 canvas.draw()
 
             app.processEvents()  # If we don't have this line the graphs don't update until the end of data collection
@@ -234,35 +259,88 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         topticaShortcuts.setScan(self.tn, self.startWave, waveOffset, self.endWave, self.scanRate)
         topticaShortcuts.thread_waitForSlew(self.tn, self.startWave - waveOffset)
         self.data = self.takeData()
-        dataShortcuts.saveData(self.data, self.varNames, filePath + str(self.fileName), metadata=self.metadata) # If you have no metadata set metadata=None
+        dataShortcuts.safemkdir(self.saveDir)
+        if self.saveDir[-1] != "\\":
+            self.saveDir += "\\"
+        dataShortcuts.saveData(self.data, self.varNames, self.saveDir + self.fileName, metadata=self.metadata) # If you have no metadata set metadata=None
         print("Done")
 
+
+
+############################### Piezo Scan code ######################################
+
+    # Unfortunately, the voltage steps taken by the USB6002 are noticably larger than the ones taken by the Toptica native
+    # signal generator, so we will run the piezo scan by generating the signal from the toptica, and then feeding it back
+    # into itself. Then, we can just measure the piezo voltage and the PD voltage on separate channels, in this case we have
+    # set up the system to take the signal out of the Toptica through Out A, and plugged this into a BNC tee with 2 other
+    # BNCs, one going to Fast in 3 and one going to the USB6002 ai3.
+    #
+    # (This isn't much more silly than generating the signal by the USB6002 since there's also no way to synchronize the
+    # input and the output from the USB6002, we'd still need to have a tee to measure the output, anyway)
+
     def startPiezoScan(self):
-        fSamp = 1000
-        nSamp = 50
-        #tSamp = nSamp / float(fSamp)
-        readChan = pydaqmx.TaskHandle()
-        pydaqshortcuts.makeAnalogIn("Dev1/ai2", readChan, fSamp, nSamp)
-        #plotPiezo = threading.Thread(target=pydaqshortcuts.continuouslyUpdatePlot, args=(self.canvas4, self.figHand4, self.axHand4, readChan, fSamp, nSamp, app))
-        #plotPiezo.start()
-        #pydaqshortcuts.continuouslyUpdatePlot(self.canvas4, self.figHand4, self.axHand4, readChan, fSamp, nSamp, app);
-        self.ani = animation.FuncAnimation(self.figHand4, pydaqshortcuts.makeUpdatingGraph, fargs=(self.axHand4, readChan, fSamp, nSamp,), interval=50)
+        self.laser.defaultPiezoScan() # This will run continuously
+
+    def stopPiezoScan(self):
+        self.laser.setParameter("laser1:scan:enabled", "#f")
+
+    def startPiezoSampling(self):
+        self.samplingRunning = True
+
+        fSamp = 25000
+        nSamp = int(fSamp*4/30.0)
+        # Make sure we are taking an even number of data points (so it's the name number of x and y points)
+        # if nSamp % 2 != 0:
+        #     nSamp = nSamp - 1
+
+
+        self.readChan = pydaqmx.TaskHandle()
+        pydaqshortcuts.makeAnalogIn("Dev1/ai2:3", self.readChan, fSamp, nSamp)
+
+        # Start animation, giving it the proper calibration parameters
+        arcFactor = float(self.laser.readParameter('laser1:dl:pc:external-input:factor'))
+        arcOffset = float(self.laser.readParameter('laser1:dl:pc:voltage-set'))
+        piezoQ = Queue.Queue()
+        iEnd = 100
+        self.ani = animation.FuncAnimation(self.figHand4, pydaqshortcuts.makeUpdatingGraph, fargs=(self.axHand4, self.readChan, nSamp, arcFactor, arcOffset, piezoQ, iEnd), interval=20)
         self.canvas4.draw()
         self.ani.event_source.start()
         return self.ani
 
+    def stopPiezoSampling(self):
+        self.samplingRunning = False
+        if hasattr(self, 'ani') and hasattr(self, 'readChan'):
+            self.ani.event_source.stop()
+            self.readChan = self.clearTask(self.readChan)
 
 
+    def updatePiezoSampling(self):
+        if hasattr(self, "ani") and hasattr(self, 'readChan'):
+            self.ani.event_source.stop()
+            self.clearTask(self.readChan)
+        #Update
+        if self.samplingRunning:
+            self.startPiezoSampling()
 
-    def stopPiezoScan(self):
-        #pass
-        self.ani.event_source.stop()
+
+    def clearTask(self, task):
+        if task:
+            pydaqmx.DAQmxStopTask(task)
+            pydaqmx.DAQmxClearTask(task)
+        return False  # So that we can always call stopPiezoScan without an error
 
 
     def setWavelength(self, wavelength):
-        self.tn.write("(param-set! 'laser1:ctl:wavelength-set '" + str(wavelength) + ") \r\n")
+        self.laser.setParameter("laser1:ctl:wavelength-set", str(wavelength))
+        #self.tn.write("(param-set! 'laser1:ctl:wavelength-set '" + str(wavelength) + ") \r\n")
         topticaShortcuts.thread_waitForSlew(self.tn, wavelength)
 
+
+    def resetDevice(self):
+        pydaqmx.DAQmxResetDevice("Dev1")
+
+    def startPDB(self):
+        pdb.set_trace()
 
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
