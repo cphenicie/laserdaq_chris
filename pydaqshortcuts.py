@@ -87,6 +87,7 @@ def makeAnalogIn(portString, handle, fSamp, nSamp):
     rate = pydaqmx.float64(fSamp) # The sampling rate in samples per second per channel. If you use an external source for the Sample Clock, set this value to the maximum expected rate of that clock.
     edge = pydaqmx.DAQmx_Val_Rising  # Which edge of the clock (Rising/Falling) to acquire data
     sampMode = pydaqmx.DAQmx_Val_FiniteSamps  # Acquire samples continuously or just a finite number of samples
+    # sampMode = pydaqmx.DAQmx_Val_ContSamps
     sampPerChan = pydaqmx.uInt64(nSamp)  # Total number of sample to acquire for each channel
     pydaqmx.DAQmxCfgSampClkTiming(handle, source, rate, edge, sampMode, sampPerChan)
 
@@ -113,7 +114,8 @@ def putDataInQueue(taskHandle, dataBuffer, nChan, queue):
     read = pydaqmx.int32()
     nSampsPerChan = len(dataBuffer) / nChan  # How many samples we will collect from each channel
     timeout = -1  # -1 means wait indefinitely to read the samples
-    fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies that dataBuffer will be divided into continuous blocks of data for each channel (rather than interleaved)
+    # fillMode = pydaqmx.DAQmx_Val_GroupByChannel  # Controls organization of output. Specifies that dataBuffer will be divided into continuous blocks of data for each channel (rather than interleaved)
+    fillMode = pydaqmx.DAQmx_Val_GroupByScanNumber
     arrSize = pydaqmx.uInt32(len(dataBuffer))
 
     pydaqmx.DAQmxReadBinaryI16(taskHandle, nSampsPerChan, timeout, fillMode, dataBuffer, arrSize,
@@ -209,6 +211,7 @@ def makeAnalogOut(portString, handle, freq, amp, offset, waveform):
 
 
 
+
 def makeUpdatingGraph(i, axis, taskHandle, nSamp, arcFactor, arcOffset, piezoQ):
     piezoCal = 177 # Calibration between piezo voltage and frequency detuning in MHz/V
     axis.cla()
@@ -269,11 +272,8 @@ def makeUpdatingGraph(i, axis, taskHandle, nSamp, arcFactor, arcOffset, piezoQ):
 
     axis.plot(data[1::2], data[0::2])
     piezoQ.put(data)
-    if i > iEnd:
-
-
-
-    print(i)
+    #piezoQ.put(i)
+    #print(i)
 
 
 

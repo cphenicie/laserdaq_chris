@@ -22,7 +22,7 @@ import pdb
 dev = "Dev1/"
 startTrig = "PFI0"
 waveOffset = 5  # How far away from the actual starting wavelength (in nm) we will initially slew the laser
-tUpdate = 1  # How many seconds between each update in the graph
+tUpdate = 1  # How many seconds between each update in the graph.
 #filePath = dataShortcuts.makeFilePath()
 filePath = dataShortcuts.genFilePath()
 #############################
@@ -63,6 +63,10 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.stopPiezoScanButton.clicked.connect(self.stopPiezoScan)
         self.startPiezoSamplingButton.clicked.connect(self.startPiezoSampling)
         self.stopPiezoSamplingButton.clicked.connect(self.stopPiezoSampling)
+        self.savePiezoDataContButton.clicked.connect(self.getContinuousPiezoData)
+        self.savePiezoDataOnceButton.clicked.connect(self.getSinglePiezoData)
+
+
         self.samplingRunning = False
         self.piezoScanRunning = False
         self.killPiezoScan = False
@@ -177,16 +181,25 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         self.fileName = str(self.fileNameLineEdit.text())
         self.metadata = self.metadataTextEdit.toPlainText()
         self.nChan = len(self.aiPorts)
-        self.sampFreqPerChan = self.sampleRate / self.nChan
-        self.tSamp = abs(self.endWave - self.startWave) / self.scanRate
-        self.nSampsPerChan = int(self.tSamp * self.sampFreqPerChan)
-        self.nSamps = int(self.nSampsPerChan * self.nChan)
-        self.stepBufferSize = self.sampleRate * tUpdate
-        self.nSteps = np.ceil(self.nSamps / self.stepBufferSize)
+
+
+        # Define the upper bound for how many samples we can take while the scan is running, then find the acutal
+        # highest number by considering that is has to be an integer multiple of the number of channels that can be
+        # updated an integer number of times
+        self.tElapsed = abs(self.endWave - self.startWave) / self.scanRate # nm / (nm/s) = s
+        self.nSampMax =  self.sampleRate * self.tElapsed # Samples/s * s = Samples Note: this is not exactly the total number of samples that will be taken
+        self.nSteps = int(np.ceil(self.tElapsed / float(tUpdate)))  # The number of steps through the data to update once every "tUpdate" seconds (we'll actually be a bit faster)
+
+        # We can now define the variables to put into pydaqmx for one update loop
+        self.nSampsPerChanPerStep = int(self.nSampMax/(self.nChan*self.nSteps)) # int(a/b) is equivalent to int(np.floor(a/b))
+        self.fSampPerChan = self.nSampsPerChanPerStep * self.nSteps / self.tElapsed # Frequency so we will take the full amount of time to get the samples
+
         self.q = Queue.Queue()
-        #self.tn = telnetlib.Telnet("10.0.0.2", 1998) # move to constructor
         self.varNames = self.aiNames
         self.varNames.append("NominalWavelength")  # We will put the nominal wavelengths as the last entry in the data array
+
+        # import pdb
+        # pdb.set_trace()
 
         # Initialize which plots will be shown on which axes, by default they are on the first item added
         if self.nChan > 1:
@@ -207,27 +220,29 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         time.sleep(0.5)
         print "Starting scan"
         self.readAI = pydaqmx.TaskHandle()
-        pydaqshortcuts.makeAnalogIn(self.portString, self.readAI, self.sampFreqPerChan, self.nSampsPerChan)
+        # pydaqshortcuts.makeAnalogIn(self.portString, self.readAI, self.sampFreqPerChan, self.nSampsPerChan)
+        pydaqshortcuts.makeAnalogIn(self.portString, self.readAI, self.fSampPerChan, self.nSampsPerChanPerStep * self.nSteps)
         pydaqmx.DAQmxCfgDigEdgeStartTrig(self.readAI, startTrig, pydaqmx.DAQmx_Val_Rising)  # Trigger to actually start collecting data
         pydaqmx.DAQmxStartTask(self.readAI)
         self.tn.write("(exec 'laser1:ctl:scan:start) \r\n")
 
         # Initialize some variables
         ptsPerChan = 0
-        stepBuffer = np.zeros((int(self.stepBufferSize),), dtype=np.int16)  # Needs to be int16 to work with PyDAQmx, the DAQ units are all integers anyway
-        fullBuffer = np.zeros((int(self.nSampsPerChan), int(self.nChan)+1), dtype=np.float32)  # One extra column for the nominal wavelength. Use float32 so we can cast an int16 into it as well as put floats in
-        fullBuffer[:, -1] = np.linspace(self.startWave, self.endWave, self.nSampsPerChan)  # Place nominal wavelengths in the last column just so we don't have "+1" floating around the loops
-        while (self.nChan * ptsPerChan) < self.nSamps:  # While we haven't collected all the data
-            # Make a thread to grab data from the readAI task in parallel to the rest of the code
-            #  NOTE: should this be in the while loop? Or executed right before the while loop starts?
+        stepBuffer = np.zeros(self.nSampsPerChanPerStep * self.nChan, dtype=np.int16)  # Needs to be int16 to work with PyDAQmx, the DAQ units are all integers anyway
+        fullBuffer = np.zeros((self.nSampsPerChanPerStep * self.nSteps, self.nChan + 1), dtype=np.float32)  # One extra column for the nominal wavelength. Use float32 so we can cast an int16 into it as well as put floats in for the nominal wavelength
+        fullBuffer[:, -1] = np.linspace(self.startWave, self.endWave, self.nSampsPerChanPerStep * self.nSteps)  # Place nominal wavelengths in the last column just so we don't have "+1" floating around the loops
+
+        for i in range(self.nSteps):
+            # Make a thread to grab data from the readAI task in parallel to the rest of the code, a new thread for each step.
             t = threading.Thread(target=pydaqshortcuts.putDataInQueue, args=(self.readAI, stepBuffer, self.nChan, self.q))
             t.start()
 
             # Retrieve the data from the queue and sort it
             stepData = self.q.get()
             numTakenPerChan = self.q.get().value  # The ctypes object stores the value in a python-friendly format using the .value attribute
+
             for j in range(self.nChan):
-                fullBuffer[ptsPerChan: ptsPerChan + numTakenPerChan, j] = stepData[j * numTakenPerChan: (j + 1) * numTakenPerChan]
+                fullBuffer[ptsPerChan: ptsPerChan + numTakenPerChan, j] = stepData[j::self.nChan] # j::self.nChan is call "slicing", means "start at j, go until end, in steps of size self.nChan"
             ptsPerChan += numTakenPerChan  # Make sure this is updated AFTER we used it in fullBuffer
 
             for axis, canvas in zip(self.axes, self.canvases):
@@ -289,10 +304,6 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
 
         fSamp = 25000
         nSamp = int(fSamp*4/30.0)
-        # Make sure we are taking an even number of data points (so it's the name number of x and y points)
-        # if nSamp % 2 != 0:
-        #     nSamp = nSamp - 1
-
 
         self.readChan = pydaqmx.TaskHandle()
         pydaqshortcuts.makeAnalogIn("Dev1/ai2:3", self.readChan, fSamp, nSamp)
@@ -300,12 +311,30 @@ class MyApp(QtGui.QMainWindow, Ui_MainWindow):
         # Start animation, giving it the proper calibration parameters
         arcFactor = float(self.laser.readParameter('laser1:dl:pc:external-input:factor'))
         arcOffset = float(self.laser.readParameter('laser1:dl:pc:voltage-set'))
-        piezoQ = Queue.Queue()
-        iEnd = 100
-        self.ani = animation.FuncAnimation(self.figHand4, pydaqshortcuts.makeUpdatingGraph, fargs=(self.axHand4, self.readChan, nSamp, arcFactor, arcOffset, piezoQ, iEnd), interval=20)
+        self.piezoQ = Queue.Queue()
+        self.ani = animation.FuncAnimation(self.figHand4, pydaqshortcuts.makeUpdatingGraph, fargs=(self.axHand4, self.readChan, nSamp, arcFactor, arcOffset, self.piezoQ), interval=20)
         self.canvas4.draw()
         self.ani.event_source.start()
         return self.ani
+
+    def flushQueue(self, q):
+        """ Because using q.queue.clear() just breaks everything """
+        print("flushing queue...")
+        for i in range(q.qsize()-1):
+            q.get()
+        print("done")
+
+    def getSinglePiezoData(self):
+        # Flush all the data previously put in the queue
+        self.flushQueue(self.piezoQ)
+        data = self.piezoQ.get()
+        # import matplotlib.pyplot as plt
+        # plt.plot(data[1::2], data[0::2])
+        # plt.show()
+        return data
+
+    def getContinuousPiezoData(self):
+        pass
 
     def stopPiezoSampling(self):
         self.samplingRunning = False
